@@ -4,11 +4,11 @@
  */
 
 export const AppCalculationConstants = {
-  standardSpacings_mm: [300, 250, 200, 175, 150, 100, 75, 50],
+  standardSpacings_mm: [300, 250, 200, 175, 150, 125, 100, 75, 50],
   overReinforcedThresholdK: 0.156,
   leverArmCap: 0.95,
-  minSteelFactorFy460: 0.0013,
-  minSteelFactorFy250: 0.0024,
+  minSteelFactorFy460: 0.0013, // 0.13% bh
+  minSteelFactorFy250: 0.0024, // 0.24% bh
   assumedServiceLoadFactor: 1.5,
   bufferMargin_mm2: 100,
   validationBounds: {
@@ -26,6 +26,19 @@ export const AppCalculationConstants = {
     OneWaySolid: { lx: 4.0, ly: 5.0, h: 160, c: 25, barX: 12, barY: 10, fcu: 30, fy: 460, n: 12.0 },
     Cantilever: { lx: 2.0, ly: 2.0, h: 160, c: 25, barX: 12, barY: 10, fcu: 30, fy: 460, n: 10.0 }
   }
+};
+
+// Sectional Areas per Metre Width for Various Bar Spacings (mm²/m) - Exact Table Transcribed
+export const REBAR_AREA_TABLE = {
+  6:  { 50: 566,  75: 377,  100: 283,  125: 226,  150: 189,  175: 162,  200: 142,  250: 113,  300: 94.3 },
+  8:  { 50: 1010, 75: 671,  100: 503,  125: 402,  150: 335,  175: 287,  200: 252,  250: 201,  300: 168 },
+  10: { 50: 1570, 75: 1050, 100: 785,  125: 628,  150: 523,  175: 449,  200: 393,  250: 314,  300: 262 },
+  12: { 50: 2260, 75: 1510, 100: 1130, 125: 905,  150: 754,  175: 646,  200: 566,  250: 452,  300: 377 },
+  16: { 50: 4020, 75: 2680, 100: 2010, 125: 1610, 150: 1340, 175: 1150, 200: 1010, 250: 804,  300: 670 },
+  20: { 50: 6280, 75: 4190, 100: 3140, 125: 2510, 150: 2090, 175: 1800, 200: 1570, 250: 1260, 300: 1050 },
+  25: { 50: 9820, 75: 6550, 100: 4910, 125: 3930, 150: 3270, 175: 2810, 200: 2450, 250: 1960, 300: 1640 },
+  32: { 50: 16100, 75: 10700, 100: 8040, 125: 6430, 150: 5360, 175: 4600, 200: 4020, 250: 3220, 300: 2680 },
+  40: { 50: 25100, 75: 16800, 100: 12600, 125: 10100, 150: 8380, 175: 7180, 200: 6280, 250: 5030, 300: 4190 }
 };
 
 // BS 8110 Table 3.14 Edge Condition Reference (Cases 1 - 9)
@@ -255,47 +268,61 @@ function getTable315Coeffs(panelType, lyOverLxRaw) {
 }
 
 /**
- * AUTOMATIC SPACING SOLVER
- * Evaluates standard spacings [300, 250, 200, 175, 150, 100, 75, 50] mm
- * where As,prov >= As,req + 100 mm²/m AND s <= min(3h, 400mm)
+ * AUTOMATIC SPACING SOLVER FROM REBAR AREA TABLE
+ * Selects area provided directly from the REBAR_AREA_TABLE column for desired bar diameter.
+ * Finds closest area value to As_req that is MORE than As_req + 100 mm²/m (As_prov >= As_req + 100)
+ * and satisfies maximum spacing limit s <= min(3h, 400mm).
  */
 function solveOptimalSpacing(As_req, b, d, h, barDia) {
-  const standardSpacings = AppCalculationConstants.standardSpacings_mm;
+  const standardSpacings = AppCalculationConstants.standardSpacings_mm; // [300, 250, 200, 175, 150, 125, 100, 75, 50]
   const maxSpacingLimit = Math.min(400, Math.floor(3 * h));
   const validSpacings = standardSpacings.filter((s) => s <= maxSpacingLimit);
 
-  const targetAsProvMin = As_req + AppCalculationConstants.bufferMargin_mm2;
+  const targetAsProvMin = As_req + AppCalculationConstants.bufferMargin_mm2; // As_req + 100
   let chosenBarDia = barDia;
   let chosenSpacing = 150;
   let As_prov = 0;
 
-  for (let s of validSpacings) {
-    const area = (1000 / s) * (Math.PI * Math.pow(chosenBarDia, 2) / 4) * (b / 1000);
-    if (area >= targetAsProvMin) {
+  let tableForBar = REBAR_AREA_TABLE[chosenBarDia] || REBAR_AREA_TABLE[12];
+
+  // Evaluate spacings from largest spacing (smallest area) to smallest spacing (largest area)
+  // To find the CLOSEST value to As_req that is STILL >= As_req + 100
+  const candidateSpacings = [...validSpacings].sort((a, b) => b - a);
+
+  for (let s of candidateSpacings) {
+    const area = tableForBar[s];
+    if (area && area >= targetAsProvMin) {
       chosenSpacing = s;
       As_prov = area;
       break;
     }
   }
 
+  // If no spacing for current bar diameter satisfies As_prov >= As_req + 100, step up bar diameter
   if (As_prov < targetAsProvMin) {
-    const barSizes = [10, 12, 16, 20];
-    const currentIndex = barSizes.indexOf(barDia);
-    const nextBarDia = barSizes[Math.min(barSizes.length - 1, currentIndex + 1)];
+    const availableBars = [6, 8, 10, 12, 16, 20, 25, 32, 40];
+    const currentIndex = availableBars.indexOf(barDia);
 
-    chosenBarDia = nextBarDia;
-    for (let s of validSpacings) {
-      const area = (1000 / s) * (Math.PI * Math.pow(chosenBarDia, 2) / 4) * (b / 1000);
-      if (area >= targetAsProvMin) {
-        chosenSpacing = s;
-        As_prov = area;
-        break;
+    for (let i = currentIndex + 1; i < availableBars.length; i++) {
+      const nextBarDia = availableBars[i];
+      const nextTable = REBAR_AREA_TABLE[nextBarDia];
+      if (!nextTable) continue;
+
+      for (let s of candidateSpacings) {
+        const area = nextTable[s];
+        if (area && area >= targetAsProvMin) {
+          chosenBarDia = nextBarDia;
+          chosenSpacing = s;
+          As_prov = area;
+          break;
+        }
       }
+      if (As_prov >= targetAsProvMin) break;
     }
 
     if (As_prov < targetAsProvMin) {
       chosenSpacing = 50;
-      As_prov = (1000 / 50) * (Math.PI * Math.pow(chosenBarDia, 2) / 4) * (b / 1000);
+      As_prov = (REBAR_AREA_TABLE[chosenBarDia] || {})[50] || 2260;
     }
   }
 
@@ -310,19 +337,23 @@ function solveOptimalSpacing(As_req, b, d, h, barDia) {
 }
 
 /**
- * Solve Single Section Flexure with Line-by-Line Worked Equations & K > 0.156 Guard
+ * Solve Single Section Flexure with Separate As,calc & As,min & Clear Insufficient Message
  */
 function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy, initialBarDia }) {
-  const minFactor = fy >= 400 ? AppCalculationConstants.minSteelFactorFy460 : AppCalculationConstants.minSteelFactorFy250;
-  const As_min = minFactor * b * h;
+  // As,min factor: 0.24% bh for fy=250, 0.13% bh for fy=460
+  const minPercentage = fy <= 250 ? 0.0024 : 0.0013;
+  const minPercentText = fy <= 250 ? '0.24%' : '0.13%';
+  const As_min = minPercentage * b * h;
 
   if (M <= 0) {
     const autoSteel = solveOptimalSpacing(As_min, b, d, h, initialBarDia);
     const workingLines = [
       `M = 0.00 kNm/m`,
-      `As,min = ${minFactor} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`,
-      `As,req  = ${Math.round(As_min)} mm²/m   (governed by Minimum)`,
-      `Spacing: ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m ✓ (≤ 400mm, ≤ 3h=${autoSteel.maxSpacingLimit}mm)`
+      `As,calc = 0 mm²/m`,
+      `As,min = ${minPercentText} × b × h = ${minPercentage} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`,
+      `Notice: Calculated As,req (0 mm²/m) is less than As,min (${Math.round(As_min)} mm²/m). Minimum code steel As,min will be used as As,req.`,
+      `As,req = ${Math.round(As_min)} mm²/m (governed by As,min)`,
+      `Area Provided (Table): ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m (closest area ≥ ${Math.round(As_min + 100)} mm²/m, s ≤ ${autoSteel.maxSpacingLimit}mm)`
     ];
 
     return {
@@ -337,6 +368,8 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
       As_min,
       As_req: As_min,
       governingSource: 'Minimum',
+      isAsCalcInsufficient: true,
+      insufficientMessage: `Calculated As,calc (0 mm²/m) is insufficient (< As,min ${Math.round(As_min)} mm²/m). As,min = ${Math.round(As_min)} mm²/m will be used as As,req.`,
       As_prov: autoSteel.As_prov,
       margin: autoSteel.margin,
       barDia: autoSteel.barDia,
@@ -372,6 +405,8 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
       As_min,
       As_req: null,
       governingSource: null,
+      isAsCalcInsufficient: false,
+      insufficientMessage: null,
       As_prov: 0,
       margin: 0,
       barDia: initialBarDia,
@@ -387,27 +422,41 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
   const z = Math.min(AppCalculationConstants.leverArmCap * d, d * z_factor);
   const z_working = `z = d[0.5 + √(0.25 − ${K.toFixed(3)}/0.9)] = ${z.toFixed(1)}mm (capped at 0.95d = ${(0.95 * d).toFixed(1)}mm)`;
 
-  // As,calc calculation
+  // As,calc calculation separately
   const As_calc = (M * 1e6) / (0.95 * fy * z);
   const As_calc_working = `As,calc = (${M.toFixed(2)}×10⁶) / (0.95×${fy}×${z.toFixed(1)}) = ${Math.round(As_calc)} mm²/m`;
 
-  // As,min calculation
-  const As_min_working = `As,min = ${minFactor} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`;
+  // As,min calculation separately
+  const As_min_working = `As,min (${minPercentText} bh) = ${minPercentage} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`;
 
-  // As,req governing
+  // Check if As,calc is insufficient
+  const isAsCalcInsufficient = As_calc < As_min;
   const As_req = Math.max(As_calc, As_min);
-  const governingSource = As_calc >= As_min ? 'Calculated' : 'Minimum';
-  const As_req_working = `As,req  = max(${Math.round(As_calc)}, ${Math.round(As_min)}) = ${Math.round(As_req)} mm²/m   (governed by ${governingSource})`;
+  const governingSource = isAsCalcInsufficient ? 'Minimum (As,min)' : 'Calculated (As,calc)';
 
-  // Spacing & As,prov
+  let comparisonWorking = '';
+  let insufficientMessage = '';
+
+  if (isAsCalcInsufficient) {
+    insufficientMessage = `Calculated As,calc (${Math.round(As_calc)} mm²/m) is insufficient (< As,min ${Math.round(As_min)} mm²/m). Minimum code steel As,min = ${Math.round(As_min)} mm²/m will be used as As,req.`;
+    comparisonWorking = `Notice: Calculated As,calc (${Math.round(As_calc)} mm²/m) is insufficient because it is less than As,min (${Math.round(As_min)} mm²/m). Minimum steel As,min will be used as As,req.`;
+  } else {
+    insufficientMessage = `Calculated As,calc (${Math.round(As_calc)} mm²/m) is sufficient (≥ As,min ${Math.round(As_min)} mm²/m). As,req = ${Math.round(As_calc)} mm²/m.`;
+    comparisonWorking = `As,calc (${Math.round(As_calc)} mm²/m) ≥ As,min (${Math.round(As_min)} mm²/m) → As,calc governs as As,req.`;
+  }
+
+  const As_req_working = `As,req = ${Math.round(As_req)} mm²/m   (governed by ${governingSource})`;
+
+  // Spacing & As,prov directly from BS 8110 Rebar Area Table
   const autoSteel = solveOptimalSpacing(As_req, b, d, h, initialBarDia);
-  const spacing_working = `Spacing: ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m ✓ (≤ 400mm, ≤ 3h=${autoSteel.maxSpacingLimit}mm, +100 mm²/m buffer)`;
+  const spacing_working = `Area Provided (BS 8110 Table): ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m (closest table value ≥ ${Math.round(As_req + 100)} mm²/m, s ≤ ${autoSteel.maxSpacingLimit}mm)`;
 
   const workingLines = [
     K_working,
     z_working,
     As_calc_working,
     As_min_working,
+    comparisonWorking,
     As_req_working,
     spacing_working
   ];
@@ -424,6 +473,8 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
     As_min,
     As_req,
     governingSource,
+    isAsCalcInsufficient,
+    insufficientMessage,
     As_prov: autoSteel.As_prov,
     margin: autoSteel.margin,
     barDia: autoSteel.barDia,
@@ -503,7 +554,7 @@ export function calculateBS8110Slab(inputs) {
 
   // DIRECTIONAL DEPTH TRACKING: dx vs dy
   const dx = h - cover - phiX / 2;
-  const dy = dx - phiX; // Long span sits one bar diameter lower
+  const dy = dx - phiX;
 
   let n = 0;
   if (loadMode === 'gk_qk') {
@@ -587,8 +638,6 @@ export function calculateBS8110Slab(inputs) {
   });
 
   const flexurePass = flexureShortMidspan.pass && flexureShortSupport.pass && flexureLongMidspan.pass && flexureLongSupport.pass;
-
-  // Check if any section is over-reinforced
   const hasOverReinforced = flexureShortMidspan.overReinforced || flexureShortSupport.overReinforced || flexureLongMidspan.overReinforced || flexureLongSupport.overReinforced;
 
   // -------------------------------------------------------------
@@ -636,16 +685,14 @@ export function calculateBS8110Slab(inputs) {
 
   // -------------------------------------------------------------
   // STEP 4: SERVICEABILITY DEFLECTION CHECK
-  // Assumed service load factor = 1.5 -> ns = n / 1.5
   // -------------------------------------------------------------
-  let basicSpanToDepth = 26; // Default Two-Way Restrained
+  let basicSpanToDepth = 26;
   if (isTwoWaySS || isOneWay) {
     basicSpanToDepth = 20;
   } else if (isCantilever) {
     basicSpanToDepth = 7;
   }
 
-  // Service load ns = n / 1.5
   const ns = n / AppCalculationConstants.assumedServiceLoadFactor;
   const Msx_service = (momentCoeffs.bsx || 0.125) * ns * Math.pow(lx, 2);
 

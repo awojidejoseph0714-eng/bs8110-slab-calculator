@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, AlertTriangle, Save, FileSpreadsheet, Sliders, Shield, Eye } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Save, FileSpreadsheet, Sliders, Shield, Eye, Info } from 'lucide-react';
 
 export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsModal, onToggleShear, enableShearCheck }) {
   if (!result) return null;
@@ -112,7 +112,7 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
         </div>
       </div>
 
-      {/* 2. BENDING MOMENTS (2x2 GRID FOR TWO-WAY) */}
+      {/* 2. BENDING MOMENTS */}
       <div className="framer-card">
         <div className="card-title-row">
           <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>1. Bending Moments (M = β · n · lx²)</h3>
@@ -172,11 +172,11 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
         </div>
       </div>
 
-      {/* 3. FLEXURAL REINFORCEMENT SUMMARY PER DIRECTION */}
+      {/* 3. FLEXURAL REINFORCEMENT SUMMARY (SEPARATE As,calc & As,min & BS 8110 TABLE LOOKUP) */}
       <div className="framer-card">
         <div className="card-title-row">
-          <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>2. Flexural Reinforcement Output</h3>
-          <span className="clause-badge">Cl 3.4.4.4</span>
+          <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>2. Flexural Steel Area & BS 8110 Table Spacing</h3>
+          <span className="clause-badge">Cl 3.4.4.4 / Cl 3.12.5</span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -201,16 +201,27 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
 
               {sec.overReinforced ? (
                 <div style={{ padding: '10px 12px', background: 'var(--bg-card-alt)', border: '1px solid var(--text-main)', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
-                  <strong>OVER-REINFORCED (K &gt; 0.156):</strong> z, As and spacing calculations halted for this direction.<br />
+                  <strong>OVER-REINFORCED (K &gt; 0.156):</strong> z, As and spacing calculations halted.<br />
                   {sec.overReinforcedMessage}
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', background: 'var(--bg-card-alt)', padding: '10px 12px', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
-                  <div>K: <strong>{sec.K.toFixed(3)}</strong></div>
-                  <div>As req: <strong>{Math.round(sec.As_req)} mm²/m</strong> <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({sec.governingSource})</span></div>
-                  <div>Solved Spacing: <strong>{sec.barDetail}</strong></div>
-                  <div>As prov: <strong>{Math.round(sec.As_prov)} mm²/m</strong></div>
-                  <div>Margin: <strong>+{Math.round(sec.margin)} mm²/m</strong></div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {/* Separate As,calc vs As,min Notification Callout */}
+                  {sec.isAsCalcInsufficient && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 10px', background: 'var(--bg-card-alt)', border: '1px solid var(--border-subtle)', borderRadius: '4px', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                      <Info size={16} style={{ minWidth: '16px', marginTop: '1px' }} />
+                      <div>{sec.insufficientMessage}</div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', background: 'var(--bg-card-alt)', padding: '10px 12px', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                    <div>As calc: <strong>{Math.round(sec.As_calc)} mm²/m</strong></div>
+                    <div>As min: <strong>{Math.round(sec.As_min)} mm²/m</strong></div>
+                    <div>Governing As req: <strong>{Math.round(sec.As_req)} mm²/m</strong> <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({sec.governingSource})</span></div>
+                    <div>Solved Spacing (Table): <strong>{sec.barDetail}</strong></div>
+                    <div>As prov (Table): <strong>{Math.round(sec.As_prov)} mm²/m</strong></div>
+                    <div>Margin (ΔAs ≥ 100): <strong>+{Math.round(sec.margin)} mm²/m</strong></div>
+                  </div>
                 </div>
               )}
             </div>
@@ -229,6 +240,7 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', background: 'var(--bg-card-alt)', padding: '12px', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '0.825rem' }}>
           <div>Base Ratio: <strong>{deflection?.basicSpanToDepth}</strong></div>
+          <div>Service Load ns: <strong>{deflection?.ns?.toFixed(2)} kN/m²</strong></div>
           <div>Service Stress fs: <strong>{deflection?.fs.toFixed(1)} N/mm²</strong></div>
           <div>Factor F1: <strong>{deflection?.F1.toFixed(2)}</strong></div>
           <div>Allowable Span/d: <strong>{deflection?.allowableSpanToDepth.toFixed(1)}</strong></div>
