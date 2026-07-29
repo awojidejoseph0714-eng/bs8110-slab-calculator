@@ -1,17 +1,46 @@
 /**
- * BS 8110-1:1997 Structural Concrete Slab Calculator Engine (v1 Specification)
- * Personal Cross-Checking Tool
- * 
- * Features:
- * - Directional depth split: dx = h - cover - phi/2, dy = dx - phi
- * - Over-reinforced guard: K > 0.156 halts z/As calculation and flags compression steel
- * - Full line-by-line worked equation strings for K, z, As,calc, As,min, As,req, spacing & As,prov
- * - Rebar spacing: s in {300, 250, 200, 175, 150, 100, 75, 50} where As,prov >= As,req + 100 and s <= min(3h, 400mm)
- * - Optional Shear check (off by default) with vc capped at min(0.8*sqrt(fcu), 5 N/mm²)
- * - Deflection check driven by slabType (20 for simple, 26 for continuous, 7 for cantilever)
+ * CrossCheck — BS 8110 Slab Calculation Engine & Constants
+ * Hand-Calculation Parity Cross-Checker for Structural Engineers
  */
 
-// Exact BS 8110 Table 3.14 Bending Moment Coefficients
+export const AppCalculationConstants = {
+  standardSpacings_mm: [300, 250, 200, 175, 150, 100, 75, 50],
+  overReinforcedThresholdK: 0.156,
+  leverArmCap: 0.95,
+  minSteelFactorFy460: 0.0013,
+  minSteelFactorFy250: 0.0024,
+  assumedServiceLoadFactor: 1.5,
+  bufferMargin_mm2: 100,
+  validationBounds: {
+    span_mm: { min: 500, max: 50000 },
+    depthH_mm: { min: 50, max: 1000 },
+    coverC_mm: { min: 10, max: 100 },
+    barDiameter_mm: { min: 6, max: 40 },
+    fcu_Nmm2: { min: 15, max: 80 },
+    fy_Nmm2: { min: 250, max: 500 },
+    loadN_kNm2: { min: 0.1, max: 100.0 }
+  },
+  defaultValues: {
+    TwoWayRestrained: { lx: 4.0, ly: 5.0, h: 160, c: 25, barX: 12, barY: 10, fcu: 30, fy: 460, n: 12.0, caseNumber: 3 },
+    TwoWaySimplySupported: { lx: 4.0, ly: 5.0, h: 160, c: 25, barX: 12, barY: 10, fcu: 30, fy: 460, n: 12.0 },
+    OneWaySolid: { lx: 4.0, ly: 5.0, h: 160, c: 25, barX: 12, barY: 10, fcu: 30, fy: 460, n: 12.0 },
+    Cantilever: { lx: 2.0, ly: 2.0, h: 160, c: 25, barX: 12, barY: 10, fcu: 30, fy: 460, n: 10.0 }
+  }
+};
+
+// BS 8110 Table 3.14 Edge Condition Reference (Cases 1 - 9)
+export const EDGE_CONDITION_CASES = [
+  { caseNumber: 1, id: 'interior', name: 'Case 1: Interior Panel', description: 'Continuous over four edges' },
+  { caseNumber: 2, id: 'one_short_discontinuous', name: 'Case 2: One Short Edge Discontinuous', description: 'One short edge discontinuous' },
+  { caseNumber: 3, id: 'one_long_discontinuous', name: 'Case 3: One Long Edge Discontinuous', description: 'One long edge discontinuous' },
+  { caseNumber: 4, id: 'two_adjacent_discontinuous', name: 'Case 4: Two Adjacent Edges Discontinuous', description: 'Corner panel (two adjacent edges discontinuous)' },
+  { caseNumber: 5, id: 'two_short_discontinuous', name: 'Case 5: Two Short Edges Discontinuous', description: 'Two short edges discontinuous' },
+  { caseNumber: 6, id: 'two_long_discontinuous', name: 'Case 6: Two Long Edges Discontinuous', description: 'Two long edges discontinuous' },
+  { caseNumber: 7, id: 'three_edges_discontinuous_long_cont', name: 'Case 7: Three Edges Discontinuous (Long Cont.)', description: 'Three edges discontinuous, one long edge continuous' },
+  { caseNumber: 8, id: 'three_edges_discontinuous_short_cont', name: 'Case 8: Three Edges Discontinuous (Short Cont.)', description: 'Three edges discontinuous, one short edge continuous' },
+  { caseNumber: 9, id: 'four_edges_discontinuous', name: 'Case 9: Four Edges Discontinuous', description: 'Discontinuous over four edges' }
+];
+
 const TABLE_3_14 = {
   interior: {
     1.0:  { bhx: 0.031, bsx: 0.024, bhy: 0.032, bsy: 0.024 },
@@ -105,7 +134,6 @@ const TABLE_3_14 = {
   }
 };
 
-// Exact BS 8110 Table 3.15 Shear Force Coefficients
 const TABLE_3_15 = {
   interior: {
     1.0:  { bvx: 0.33, bvy: 0.33 },
@@ -228,15 +256,15 @@ function getTable315Coeffs(panelType, lyOverLxRaw) {
 
 /**
  * AUTOMATIC SPACING SOLVER
- * Picks largest standard spacing s in {300, 250, 200, 175, 150, 100, 75, 50} mm
+ * Evaluates standard spacings [300, 250, 200, 175, 150, 100, 75, 50] mm
  * where As,prov >= As,req + 100 mm²/m AND s <= min(3h, 400mm)
  */
 function solveOptimalSpacing(As_req, b, d, h, barDia) {
-  const standardSpacings = [300, 250, 200, 175, 150, 100, 75, 50];
+  const standardSpacings = AppCalculationConstants.standardSpacings_mm;
   const maxSpacingLimit = Math.min(400, Math.floor(3 * h));
   const validSpacings = standardSpacings.filter((s) => s <= maxSpacingLimit);
 
-  const targetAsProvMin = As_req + 100;
+  const targetAsProvMin = As_req + AppCalculationConstants.bufferMargin_mm2;
   let chosenBarDia = barDia;
   let chosenSpacing = 150;
   let As_prov = 0;
@@ -284,21 +312,22 @@ function solveOptimalSpacing(As_req, b, d, h, barDia) {
 /**
  * Solve Single Section Flexure with Line-by-Line Worked Equations & K > 0.156 Guard
  */
-function solveFlexureSection({ locationName, M, b, d, h, fcu, fy, initialBarDia }) {
-  const minPercentage = fy >= 400 ? 0.0013 : 0.0024;
-  const As_min = minPercentage * b * h;
+function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy, initialBarDia }) {
+  const minFactor = fy >= 400 ? AppCalculationConstants.minSteelFactorFy460 : AppCalculationConstants.minSteelFactorFy250;
+  const As_min = minFactor * b * h;
 
   if (M <= 0) {
     const autoSteel = solveOptimalSpacing(As_min, b, d, h, initialBarDia);
     const workingLines = [
       `M = 0.00 kNm/m`,
-      `As,min = ${minPercentage} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`,
-      `As,req  = ${Math.round(As_min)} mm²/m (governed by As,min)`,
+      `As,min = ${minFactor} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`,
+      `As,req  = ${Math.round(As_min)} mm²/m   (governed by Minimum)`,
       `Spacing: ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m ✓ (≤ 400mm, ≤ 3h=${autoSteel.maxSpacingLimit}mm)`
     ];
 
     return {
       locationName,
+      directionName,
       M: 0,
       d,
       K: 0,
@@ -307,7 +336,7 @@ function solveFlexureSection({ locationName, M, b, d, h, fcu, fy, initialBarDia 
       As_calc: 0,
       As_min,
       As_req: As_min,
-      governedBy: 'As_min',
+      governingSource: 'Minimum',
       As_prov: autoSteel.As_prov,
       margin: autoSteel.margin,
       barDia: autoSteel.barDia,
@@ -323,55 +352,56 @@ function solveFlexureSection({ locationName, M, b, d, h, fcu, fy, initialBarDia 
   const K_working = `K = (${M.toFixed(2)}×10⁶)/(1000×${d.toFixed(0)}²×${fcu}) = ${K.toFixed(3)}`;
 
   // OVER-REINFORCED GUARD (K > 0.156)
-  if (K > 0.156) {
+  if (K > AppCalculationConstants.overReinforcedThresholdK) {
     const workingLines = [
       K_working,
-      `⚠️ OVER-REINFORCED SECTION: K (${K.toFixed(3)}) > 0.156 limit per BS 8110 Cl 3.4.4.4.`,
-      `Section requires compression reinforcement or depth (h) redesign. z and As calculation halted.`
+      `⚠️ OVER-REINFORCED SECTION: K (${K.toFixed(3)}) > 0.156 threshold per BS 8110 Cl 3.4.4.4.`,
+      `Section requires compression reinforcement or depth (h) redesign. z, As and spacing calculations halted.`
     ];
 
     return {
       locationName,
+      directionName,
       M,
       d,
       K,
       overReinforced: true,
-      overReinforcedMessage: `K = ${K.toFixed(3)} > 0.156 (Needs compression steel or redesign)`,
+      overReinforcedMessage: `K = ${K.toFixed(3)} > 0.156 (Compression steel or depth redesign required)`,
       z: null,
       As_calc: null,
       As_min,
       As_req: null,
-      governedBy: null,
+      governingSource: null,
       As_prov: 0,
       margin: 0,
       barDia: initialBarDia,
-      spacing: 0,
+      spacing: null,
       barDetail: `Over-reinforced (K > 0.156)`,
       workingLines,
       pass: false
     };
   }
 
-  // z calculation
+  // z calculation capped at 0.95d
   const z_factor = 0.5 + Math.sqrt(Math.max(0, 0.25 - K / 0.9));
-  const z = Math.min(0.95 * d, d * z_factor);
-  const z_working = `z = d[0.5 + √(0.25 − ${K.toFixed(3)}/0.9)] = ${z.toFixed(1)}mm (cap 0.95d = ${(0.95 * d).toFixed(1)}mm)`;
+  const z = Math.min(AppCalculationConstants.leverArmCap * d, d * z_factor);
+  const z_working = `z = d[0.5 + √(0.25 − ${K.toFixed(3)}/0.9)] = ${z.toFixed(1)}mm (capped at 0.95d = ${(0.95 * d).toFixed(1)}mm)`;
 
   // As,calc calculation
   const As_calc = (M * 1e6) / (0.95 * fy * z);
   const As_calc_working = `As,calc = (${M.toFixed(2)}×10⁶) / (0.95×${fy}×${z.toFixed(1)}) = ${Math.round(As_calc)} mm²/m`;
 
   // As,min calculation
-  const As_min_working = `As,min = ${minPercentage} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`;
+  const As_min_working = `As,min = ${minFactor} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`;
 
   // As,req governing
   const As_req = Math.max(As_calc, As_min);
-  const governedBy = As_calc >= As_min ? 'As_calc' : 'As_min';
-  const As_req_working = `As,req  = max(${Math.round(As_calc)}, ${Math.round(As_min)}) = ${Math.round(As_req)} mm²/m   (governed by ${governedBy})`;
+  const governingSource = As_calc >= As_min ? 'Calculated' : 'Minimum';
+  const As_req_working = `As,req  = max(${Math.round(As_calc)}, ${Math.round(As_min)}) = ${Math.round(As_req)} mm²/m   (governed by ${governingSource})`;
 
   // Spacing & As,prov
   const autoSteel = solveOptimalSpacing(As_req, b, d, h, initialBarDia);
-  const spacing_working = `Spacing: ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m ✓ (≤ 400mm, ≤ 3h=${autoSteel.maxSpacingLimit}mm)`;
+  const spacing_working = `Spacing: ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m ✓ (≤ 400mm, ≤ 3h=${autoSteel.maxSpacingLimit}mm, +100 mm²/m buffer)`;
 
   const workingLines = [
     K_working,
@@ -384,6 +414,7 @@ function solveFlexureSection({ locationName, M, b, d, h, fcu, fy, initialBarDia 
 
   return {
     locationName,
+    directionName,
     M,
     d,
     K,
@@ -392,7 +423,7 @@ function solveFlexureSection({ locationName, M, b, d, h, fcu, fy, initialBarDia 
     As_calc,
     As_min,
     As_req,
-    governedBy,
+    governingSource,
     As_prov: autoSteel.As_prov,
     margin: autoSteel.margin,
     barDia: autoSteel.barDia,
@@ -404,32 +435,34 @@ function solveFlexureSection({ locationName, M, b, d, h, fcu, fy, initialBarDia 
 }
 
 /**
- * Dedicated BS 8110 Slab Engine
+ * Dedicated CrossCheck BS 8110 Slab Engine
  */
 export function calculateBS8110Slab(inputs) {
   if (!inputs) return null;
 
   const {
-    slabType = 'two_way_restrained',
+    slabType = 'TwoWayRestrained',
+    caseNumber = 3,
     panelCondition = 'one_long_discontinuous',
     
-    lxInput = '',
-    lyInput = '',
+    lxInput = 4.0,
+    lyInput = 5.0,
     lyOverLxInput = '',
     
     loadMode = 'direct_n',
-    designLoadNInput = '',
-    gkInput = '',
-    qkInput = '',
+    designLoadNInput = 12.0,
+    gkInput = 6.1,
+    qkInput = 1.5,
     
     bInput = 1000,
-    hInput = '',
+    hInput = 160,
     coverInput = 25,
     
     fcuInput = 30,
     fyInput = 460,
     
-    targetPhi = 12,
+    targetPhiX = 12,
+    targetPhiY = 10,
     enableShearCheck = false
   } = inputs;
 
@@ -440,15 +473,15 @@ export function calculateBS8110Slab(inputs) {
   if (isLxEmpty || isHEmpty || isLoadEmpty) {
     return {
       isBlank: true,
-      message: 'Please specify short span (lx), thickness (h), and design load (n) to calculate.'
+      message: 'Please enter short span (lx), depth (h), and design load (n) to compute.'
     };
   }
 
   const b = 1000;
-  const lx = Math.max(0.1, Number(lxInput) || 4.0);
+  const lx = Math.max(0.5, Number(lxInput) || 4.0);
   
   let ly = lx;
-  if (slabType === 'one_way' || slabType === 'cantilever') {
+  if (slabType === 'OneWaySolid' || slabType === 'Cantilever' || slabType === 'one_way' || slabType === 'cantilever') {
     ly = lx;
   } else if (lyInput !== '' && !isNaN(Number(lyInput))) {
     ly = Math.max(lx, Number(lyInput));
@@ -459,31 +492,36 @@ export function calculateBS8110Slab(inputs) {
   }
   
   const lyOverLxRaw = ly / lx;
-  const h = Math.max(50, Number(hInput) || 150);
-  const cover = Math.max(15, Number(coverInput) || 25);
+  const h = Math.max(50, Number(hInput) || 160);
+  const cover = Math.max(10, Number(coverInput) || 25);
   
-  const fcu = Math.min(40, Math.max(15, Number(fcuInput) || 30));
-  const fy = Math.min(460, Math.max(250, Number(fyInput) || 460));
+  const fcu = Math.min(80, Math.max(15, Number(fcuInput) || 30));
+  const fy = Math.min(500, Math.max(250, Number(fyInput) || 460));
 
-  const phi = Number(targetPhi) || 12;
+  const phiX = Number(targetPhiX) || 12;
+  const phiY = Number(targetPhiY) || 10;
 
   // DIRECTIONAL DEPTH TRACKING: dx vs dy
-  const dx = h - cover - phi / 2;
-  const dy = dx - phi; // Second layer sits one bar diameter lower
+  const dx = h - cover - phiX / 2;
+  const dy = dx - phiX; // Long span sits one bar diameter lower
 
   let n = 0;
-  let Gk = 0;
-  let Qk = 0;
   if (loadMode === 'gk_qk') {
-    Gk = Number(gkInput) || 0;
-    Qk = Number(qkInput) || 0;
+    const Gk = Number(gkInput) || 0;
+    const Qk = Number(qkInput) || 0;
     n = 1.4 * Gk + 1.6 * Qk;
   } else {
     n = Math.max(0.1, Number(designLoadNInput) || 12.0);
   }
 
+  // Map caseNumber to panelCondition
+  let resolvedCondition = panelCondition;
+  if (caseNumber && EDGE_CONDITION_CASES[caseNumber - 1]) {
+    resolvedCondition = EDGE_CONDITION_CASES[caseNumber - 1].id;
+  }
+
   // -------------------------------------------------------------
-  // STEP 1: BENDING MOMENTS (2x2 GRID FOR 2-WAY)
+  // STEP 1: BENDING MOMENTS
   // -------------------------------------------------------------
   let Msx = 0;
   let Mhx = 0;
@@ -493,21 +531,26 @@ export function calculateBS8110Slab(inputs) {
   let momentCoeffs = { bhx: 0, bsx: 0, bhy: 0, bsy: 0, effectiveRatio: 1.0 };
   let shearCoeffs = { bvx: 0, bvy: 0, effectiveRatio: 1.0 };
 
-  if (slabType === 'one_way') {
+  const isOneWay = slabType === 'OneWaySolid' || slabType === 'one_way';
+  const isCantilever = slabType === 'Cantilever' || slabType === 'cantilever';
+  const isTwoWaySS = slabType === 'TwoWaySimplySupported' || slabType === 'two_way_ss';
+  const isTwoWayRestrained = slabType === 'TwoWayRestrained' || slabType === 'two_way_restrained';
+
+  if (isOneWay) {
     momentCoeffs.bsx = 0.125;
     Msx = 0.125 * n * Math.pow(lx, 2);
-  } else if (slabType === 'cantilever') {
+  } else if (isCantilever) {
     momentCoeffs.bhx = 0.500;
     Mhx = 0.500 * n * Math.pow(lx, 2);
-  } else if (slabType === 'two_way_ss') {
+  } else if (isTwoWaySS) {
     momentCoeffs = getTable314Coeffs('four_edges_discontinuous', lyOverLxRaw);
     shearCoeffs = getTable315Coeffs('four_edges_discontinuous', lyOverLxRaw);
     Msx = momentCoeffs.bsx * n * Math.pow(lx, 2);
     Msy = momentCoeffs.bsy * n * Math.pow(lx, 2);
   } else {
     // Two-Way Restrained (BS 8110 Table 3.14)
-    momentCoeffs = getTable314Coeffs(panelCondition, lyOverLxRaw);
-    shearCoeffs = getTable315Coeffs(panelCondition, lyOverLxRaw);
+    momentCoeffs = getTable314Coeffs(resolvedCondition, lyOverLxRaw);
+    shearCoeffs = getTable315Coeffs(resolvedCondition, lyOverLxRaw);
     Msx = momentCoeffs.bsx * n * Math.pow(lx, 2);
     Mhx = momentCoeffs.bhx * n * Math.pow(lx, 2);
     Msy = momentCoeffs.bsy * n * Math.pow(lx, 2);
@@ -517,41 +560,48 @@ export function calculateBS8110Slab(inputs) {
   const M_max = Math.max(Msx, Mhx, Msy, Mhy);
 
   // -------------------------------------------------------------
-  // STEP 2: FLEXURE DESIGN PER SECTION (dx vs dy)
+  // STEP 2: FLEXURE DESIGN PER DIRECTION (dx vs dy)
   // -------------------------------------------------------------
   const flexureShortMidspan = solveFlexureSection({
     locationName: 'Short Span Midspan (+ve Msx)',
-    M: Msx, b, d: dx, h, fcu, fy, initialBarDia: phi
+    directionName: 'ShortSpan',
+    M: Msx, b, d: dx, h, fcu, fy, initialBarDia: phiX
   });
 
   const flexureShortSupport = solveFlexureSection({
     locationName: 'Short Span Support (-ve Mhx)',
-    M: Mhx, b, d: dx, h, fcu, fy, initialBarDia: phi
+    directionName: 'ShortSpan',
+    M: Mhx, b, d: dx, h, fcu, fy, initialBarDia: phiX
   });
 
   const flexureLongMidspan = solveFlexureSection({
     locationName: 'Long Span Midspan (+ve Msy)',
-    M: Msy, b, d: dy, h, fcu, fy, initialBarDia: phi
+    directionName: 'LongSpan',
+    M: Msy, b, d: dy, h, fcu, fy, initialBarDia: phiY
   });
 
   const flexureLongSupport = solveFlexureSection({
     locationName: 'Long Span Support (-ve Mhy)',
-    M: Mhy, b, d: dy, h, fcu, fy, initialBarDia: phi
+    directionName: 'LongSpan',
+    M: Mhy, b, d: dy, h, fcu, fy, initialBarDia: phiY
   });
 
   const flexurePass = flexureShortMidspan.pass && flexureShortSupport.pass && flexureLongMidspan.pass && flexureLongSupport.pass;
+
+  // Check if any section is over-reinforced
+  const hasOverReinforced = flexureShortMidspan.overReinforced || flexureShortSupport.overReinforced || flexureLongMidspan.overReinforced || flexureLongSupport.overReinforced;
 
   // -------------------------------------------------------------
   // STEP 3: OPTIONAL SHEAR CHECK (OFF BY DEFAULT)
   // -------------------------------------------------------------
   let shearCheck = null;
-  if (enableShearCheck && (slabType === 'two_way_restrained' || slabType === 'two_way_ss')) {
+  if (enableShearCheck && (isTwoWayRestrained || isTwoWaySS)) {
     const Vx = (shearCoeffs.bvx || 0.5) * n * lx;
     const Vy = (shearCoeffs.bvy || 0.33) * n * lx;
     const V_max = Math.max(Vx, Vy);
 
     const v = (V_max * 1e3) / (b * dx);
-    const v_max_cap = Math.min(0.8 * Math.sqrt(fcu), 5.0); // Capped at min(0.8*sqrt(fcu), 5 N/mm²)
+    const v_max_cap = Math.min(0.8 * Math.sqrt(fcu), 5.0);
 
     const rebarRatioRaw = (100 * flexureShortMidspan.As_prov) / (b * dx);
     const rebarRatioBounded = Math.min(3.0, Math.max(0.15, rebarRatioRaw));
@@ -576,28 +626,33 @@ export function calculateBS8110Slab(inputs) {
       pass: shearPass,
       workingLines: [
         `Table 3.15 Shear Coeffs (ratio ${momentCoeffs.effectiveRatio}): βvx = ${shearCoeffs.bvx}, βvy = ${shearCoeffs.bvy}`,
-        `Vx = βvx × n × lx = ${Vx.toFixed(2)} kN/m, Vy = βvy × n × lx = ${Vy.toFixed(2)} kN/m → Vmax = ${V_max.toFixed(2)} kN/m`,
-        `Design shear stress v = (${V_max.toFixed(2)}×10³) / (1000×${dx.toFixed(0)}) = ${v.toFixed(3)} N/mm²`,
-        `Concrete capacity vc = ${vc.toFixed(3)} N/mm² (capped at min(0.8√fcu, 5.0) = ${v_max_cap.toFixed(2)} N/mm²)`,
-        `Check: v (${v.toFixed(3)}) ≤ vc (${vc_capped.toFixed(3)}) → ${shearPass ? 'PASS (No shear links required)' : 'FAIL'}`
+        `Vx = βvx × n × lx = ${Vx.toFixed(2)} kN/m, Vy = βvy × n × lx = ${Vy.toFixed(2)} kN/m → Design Shear V = ${V_max.toFixed(2)} kN/m`,
+        `Applied shear stress v = (${V_max.toFixed(2)}×10³) / (1000×${dx.toFixed(0)}) = ${v.toFixed(3)} N/mm²`,
+        `Design concrete shear capacity vc = ${vc.toFixed(3)} N/mm² (limit cap min(0.8√fcu, 5.0) = ${v_max_cap.toFixed(2)} N/mm²)`,
+        `Shear Check: v (${v.toFixed(3)}) ≤ vc (${vc_capped.toFixed(3)}) → ${shearPass ? 'PASS (No shear links required)' : 'FAIL'}`
       ]
     };
   }
 
   // -------------------------------------------------------------
-  // STEP 4: DEFLECTION CHECK (Basic ratio driven by slabType)
+  // STEP 4: SERVICEABILITY DEFLECTION CHECK
+  // Assumed service load factor = 1.5 -> ns = n / 1.5
   // -------------------------------------------------------------
-  let basicSpanToDepth = 26; // Default continuous/restrained
-  if (slabType === 'two_way_ss' || slabType === 'one_way') {
+  let basicSpanToDepth = 26; // Default Two-Way Restrained
+  if (isTwoWaySS || isOneWay) {
     basicSpanToDepth = 20;
-  } else if (slabType === 'cantilever') {
+  } else if (isCantilever) {
     basicSpanToDepth = 7;
   }
 
-  const fs = (2 / 3) * fy * (flexureShortMidspan.As_req / flexureShortMidspan.As_prov);
-  const M_bd2 = (Msx * 1e6) / (b * Math.pow(dx, 2));
+  // Service load ns = n / 1.5
+  const ns = n / AppCalculationConstants.assumedServiceLoadFactor;
+  const Msx_service = (momentCoeffs.bsx || 0.125) * ns * Math.pow(lx, 2);
 
-  const F1_raw = 0.55 + (477 - fs) / (120 * (0.9 + M_bd2));
+  const fs = (2 / 3) * fy * (flexureShortMidspan.As_req / flexureShortMidspan.As_prov);
+  const M_bd2_service = (Msx_service * 1e6) / (b * Math.pow(dx, 2));
+
+  const F1_raw = 0.55 + (477 - fs) / (120 * (0.9 + M_bd2_service));
   const F1 = Math.min(2.0, Math.max(0.55, F1_raw));
   const F2 = 1.0;
 
@@ -607,31 +662,37 @@ export function calculateBS8110Slab(inputs) {
 
   const deflection = {
     basicSpanToDepth,
+    ns,
+    Msx_service,
     fs,
-    M_bd2,
+    M_bd2_service,
     F1,
     F2,
     allowableSpanToDepth,
     actualSpanToDepth,
     pass: deflectionPass,
     workingLines: [
-      `Basic span/d ratio = ${basicSpanToDepth} (tied to slab type: ${slabType.replace(/_/g, ' ')})`,
-      `Service stress fs = (2/3) × ${fy} × (${Math.round(flexureShortMidspan.As_req)} / ${Math.round(flexureShortMidspan.As_prov)}) = ${fs.toFixed(1)} N/mm²`,
-      `M/(b.d²) = (${Msx.toFixed(2)}×10⁶) / (1000×${dx.toFixed(0)}²) = ${M_bd2.toFixed(3)} N/mm²`,
-      `Modification factor F1 = 0.55 + (477 - ${fs.toFixed(1)}) / [120 × (0.9 + ${M_bd2.toFixed(3)})] = ${F1_raw.toFixed(2)} (cap max 2.0 → ${F1.toFixed(2)})`,
+      `Base span/d ratio = ${basicSpanToDepth} (${isTwoWayRestrained ? 'Two-Way Restrained' : isTwoWaySS ? 'Two-Way Simply Supported' : isOneWay ? 'One-Way Solid' : 'Cantilever'})`,
+      `Assumed Service Load ns = n / 1.5 = ${n.toFixed(2)} / 1.5 = ${ns.toFixed(2)} kN/m²`,
+      `Service Moment Msx,service = βsx × ns × lx² = ${Msx_service.toFixed(2)} kNm/m`,
+      `Service Tension Stress fs = (2/3) × ${fy} × (${Math.round(flexureShortMidspan.As_req)} / ${Math.round(flexureShortMidspan.As_prov)}) = ${fs.toFixed(1)} N/mm²`,
+      `M_service / (b.d²) = (${Msx_service.toFixed(2)}×10⁶) / (1000×${dx.toFixed(0)}²) = ${M_bd2_service.toFixed(3)} N/mm²`,
+      `Modification Factor F1 = 0.55 + (477 - ${fs.toFixed(1)}) / [120 × (0.9 + ${M_bd2_service.toFixed(3)})] = ${F1_raw.toFixed(2)} (capped max 2.0 → ${F1.toFixed(2)})`,
       `Allowable span/d = ${basicSpanToDepth} × ${F1.toFixed(2)} = ${allowableSpanToDepth.toFixed(2)}`,
       `Actual span/d = (${lx}×1000) / ${dx.toFixed(0)} = ${actualSpanToDepth.toFixed(2)}`,
-      `Check: Actual (${actualSpanToDepth.toFixed(1)}) ≤ Allowable (${allowableSpanToDepth.toFixed(1)}) → ${deflectionPass ? 'PASS (Deflection Satisfactory)' : 'FAIL'}`
+      `Deflection Check: Actual (${actualSpanToDepth.toFixed(1)}) ≤ Allowable (${allowableSpanToDepth.toFixed(1)}) → ${deflectionPass ? 'PASS (Deflection Adequate)' : 'FAIL'}`
     ]
   };
 
-  const overallPass = flexurePass && (shearCheck ? shearCheck.pass : true) && deflectionPass;
+  const overallPass = flexurePass && !hasOverReinforced && (shearCheck ? shearCheck.pass : true) && deflectionPass;
 
   return {
     isBlank: false,
-    inputs: { ...inputs, b, lx, ly, lyOverLxRaw, h, cover, dx, dy, fcu, fy, n, Gk, Qk, targetPhi: phi, effectiveRatio: momentCoeffs.effectiveRatio },
+    inputs: { ...inputs, b, lx, ly, lyOverLxRaw, h, cover, dx, dy, fcu, fy, n, targetPhiX: phiX, targetPhiY: phiY, effectiveRatio: momentCoeffs.effectiveRatio, caseNumber: caseNumber || 3 },
     n,
+    ns,
     M_max,
+    hasOverReinforced,
     moments: { Msx, Mhx, Msy, Mhy, momentCoeffs },
     flexureParts: {
       shortMidspan: flexureShortMidspan,
@@ -647,10 +708,11 @@ export function calculateBS8110Slab(inputs) {
 }
 
 export const SLAB_PRESETS = {
-  two_way_restrained_interior: {
-    name: 'Two-Way Restrained Slab (Interior Panel)',
-    slabType: 'two_way_restrained',
-    panelCondition: 'interior',
+  TwoWayRestrained: {
+    name: 'Two-Way Restrained Slab (Case 3)',
+    slabType: 'TwoWayRestrained',
+    caseNumber: 3,
+    panelCondition: 'one_long_discontinuous',
     lxInput: 4.0,
     lyInput: 5.0,
     hInput: 160,
@@ -659,45 +721,51 @@ export const SLAB_PRESETS = {
     designLoadNInput: 12.0,
     fcuInput: 30,
     fyInput: 460,
-    targetPhi: 12
+    targetPhiX: 12,
+    targetPhiY: 10
   },
-  two_way_ss: {
+  TwoWaySimplySupported: {
     name: 'Two-Way Simply Supported Slab',
-    slabType: 'two_way_ss',
+    slabType: 'TwoWaySimplySupported',
+    caseNumber: 9,
+    panelCondition: 'four_edges_discontinuous',
     lxInput: 4.0,
-    lyInput: 4.8,
+    lyInput: 5.0,
     hInput: 160,
-    coverInput: 25,
-    loadMode: 'direct_n',
-    designLoadNInput: 11.5,
-    fcuInput: 25,
-    fyInput: 460,
-    targetPhi: 12
-  },
-  one_way_solid: {
-    name: 'One-Way Solid Floor Slab',
-    slabType: 'one_way',
-    lxInput: 3.8,
-    lyInput: 8.5,
-    hInput: 150,
     coverInput: 25,
     loadMode: 'direct_n',
     designLoadNInput: 12.0,
     fcuInput: 30,
     fyInput: 460,
-    targetPhi: 12
+    targetPhiX: 12,
+    targetPhiY: 10
   },
-  cantilever_balcony: {
+  OneWaySolid: {
+    name: 'One-Way Solid Floor Slab',
+    slabType: 'OneWaySolid',
+    lxInput: 4.0,
+    lyInput: 5.0,
+    hInput: 160,
+    coverInput: 25,
+    loadMode: 'direct_n',
+    designLoadNInput: 12.0,
+    fcuInput: 30,
+    fyInput: 460,
+    targetPhiX: 12,
+    targetPhiY: 10
+  },
+  Cantilever: {
     name: 'Cantilever Balcony Slab',
-    slabType: 'cantilever',
-    lxInput: 1.8,
-    lyInput: 4.0,
-    hInput: 150,
+    slabType: 'Cantilever',
+    lxInput: 2.0,
+    lyInput: 2.0,
+    hInput: 160,
     coverInput: 25,
     loadMode: 'direct_n',
     designLoadNInput: 10.0,
     fcuInput: 30,
     fyInput: 460,
-    targetPhi: 12
+    targetPhiX: 12,
+    targetPhiY: 10
   }
 };

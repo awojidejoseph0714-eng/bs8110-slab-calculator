@@ -7,11 +7,12 @@ import CrossSectionCanvas from './components/CrossSectionCanvas';
 import HistoryDrawer from './components/HistoryDrawer';
 import PresetTemplatesModal from './components/PresetTemplatesModal';
 import OnboardingModal from './components/OnboardingModal';
-import { calculateBS8110Slab, SLAB_PRESETS } from './utils/bs8110Engine';
+import { calculateBS8110Slab, SLAB_PRESETS, AppCalculationConstants } from './utils/bs8110Engine';
 import { CheckCircle2, RefreshCw, AlertTriangle } from 'lucide-react';
 
 const DEFAULT_SLAB_INPUTS = {
-  slabType: 'two_way_restrained',
+  slabType: 'TwoWayRestrained',
+  caseNumber: 3,
   panelCondition: 'one_long_discontinuous',
   
   lxInput: 4.0,
@@ -29,12 +30,14 @@ const DEFAULT_SLAB_INPUTS = {
   fcuInput: 30,
   fyInput: 460,
   
-  targetPhi: 12,
+  targetPhiX: 12,
+  targetPhiY: 10,
   enableShearCheck: false
 };
 
 const BLANK_SLAB_INPUTS = {
-  slabType: 'two_way_restrained',
+  slabType: 'TwoWayRestrained',
+  caseNumber: 1,
   panelCondition: 'interior',
   
   lxInput: '',
@@ -52,7 +55,8 @@ const BLANK_SLAB_INPUTS = {
   fcuInput: '30',
   fyInput: '460',
   
-  targetPhi: '12',
+  targetPhiX: '12',
+  targetPhiY: '10',
   enableShearCheck: false
 };
 
@@ -72,7 +76,7 @@ class ErrorBoundary extends Component {
   }
 
   handleReset = () => {
-    localStorage.removeItem('bs8110_slab_inputs');
+    localStorage.removeItem('crosscheck_slab_inputs');
     this.setState({ hasError: false, error: null });
     window.location.reload();
   };
@@ -84,7 +88,7 @@ class ErrorBoundary extends Component {
           <AlertTriangle size={40} color="#ef4444" style={{ marginBottom: '12px' }} />
           <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>Application Session Reset Required</h2>
           <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '20px' }}>
-            A stored session parameter from a previous version caused a display error. Tapping reset will restore default parameters cleanly.
+            A stored session parameter caused a display error. Tapping reset will restore default parameters cleanly.
           </p>
           <button
             onClick={this.handleReset}
@@ -102,16 +106,16 @@ class ErrorBoundary extends Component {
 
 function MainCalculatorApp() {
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('bs8110_theme') || 'light';
+    return localStorage.getItem('crosscheck_theme') || 'light';
   });
 
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(() => {
-    return localStorage.getItem('bs8110_seen_onboarding') === 'true';
+    return localStorage.getItem('crosscheck_seen_onboarding') === 'true';
   });
 
   const [inputs, setInputs] = useState(() => {
     try {
-      const saved = localStorage.getItem('bs8110_slab_inputs');
+      const saved = localStorage.getItem('crosscheck_slab_inputs') || localStorage.getItem('bs8110_slab_inputs');
       return saved ? { ...DEFAULT_SLAB_INPUTS, ...JSON.parse(saved) } : DEFAULT_SLAB_INPUTS;
     } catch (e) {
       return DEFAULT_SLAB_INPUTS;
@@ -120,7 +124,7 @@ function MainCalculatorApp() {
 
   const [history, setHistory] = useState(() => {
     try {
-      const saved = localStorage.getItem('bs8110_slab_history');
+      const saved = localStorage.getItem('crosscheck_slab_history');
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
       return [];
@@ -134,15 +138,15 @@ function MainCalculatorApp() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('bs8110_theme', theme);
+    localStorage.setItem('crosscheck_theme', theme);
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem('bs8110_slab_inputs', JSON.stringify(inputs));
+    localStorage.setItem('crosscheck_slab_inputs', JSON.stringify(inputs));
   }, [inputs]);
 
   useEffect(() => {
-    localStorage.setItem('bs8110_slab_history', JSON.stringify(history));
+    localStorage.setItem('crosscheck_slab_history', JSON.stringify(history));
   }, [history]);
 
   const calculationResult = useMemo(() => {
@@ -160,7 +164,7 @@ function MainCalculatorApp() {
 
   const dismissOnboarding = () => {
     setHasSeenOnboarding(true);
-    localStorage.setItem('bs8110_seen_onboarding', 'true');
+    localStorage.setItem('crosscheck_seen_onboarding', 'true');
   };
 
   const showToast = (msg) => {
@@ -171,12 +175,12 @@ function MainCalculatorApp() {
   const handleNewBlankAnalysis = () => {
     setInputs(BLANK_SLAB_INPUTS);
     setIsParamsModalOpen(true);
-    showToast('Started new blank slab analysis');
+    showToast('Started new blank calculation');
   };
 
-  const handleClearCurrentInputs = () => {
-    setInputs(BLANK_SLAB_INPUTS);
-    showToast('Cleared slab inputs');
+  const handleResetToDefaults = () => {
+    setInputs(DEFAULT_SLAB_INPUTS);
+    showToast('Reset parameters to defaults');
   };
 
   const handleApplyPreset = (presetKey) => {
@@ -195,7 +199,7 @@ function MainCalculatorApp() {
       ...prev,
       enableShearCheck: !prev.enableShearCheck
     }));
-    showToast(inputs.enableShearCheck ? 'Shear check hidden' : 'Shear check enabled');
+    showToast(inputs.enableShearCheck ? 'Shear check disabled' : 'Shear check enabled');
   };
 
   const handleSaveToHistory = () => {
@@ -212,14 +216,14 @@ function MainCalculatorApp() {
     };
 
     setHistory((prev) => [newEntry, ...prev]);
-    showToast('Slab analysis saved to history!');
+    showToast('CrossCheck calculation saved to history!');
   };
 
   const handleLoadHistoryItem = (item) => {
     if (item && item.inputs) {
       setInputs(item.inputs);
       setIsHistoryOpen(false);
-      showToast('Loaded slab analysis from history');
+      showToast('Loaded calculation from history');
     }
   };
 
@@ -229,7 +233,7 @@ function MainCalculatorApp() {
   };
 
   const handleClearHistory = () => {
-    if (window.confirm('Clear all saved slab history?')) {
+    if (window.confirm('Clear all saved CrossCheck history?')) {
       setHistory([]);
       showToast('Cleared history');
     }
@@ -239,11 +243,11 @@ function MainCalculatorApp() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(history, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `bs8110_slab_history_${Date.now()}.json`);
+    downloadAnchor.setAttribute("download", `crosscheck_slab_history_${Date.now()}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    showToast('Exported slab history');
+    showToast('Exported calculation history');
   };
 
   const handlePrintReport = () => {
@@ -265,7 +269,7 @@ function MainCalculatorApp() {
         onPrintReport={handlePrintReport}
       />
 
-      {/* Notion-style Clean Document Stream */}
+      {/* Document Stream Layout */}
       <main className="document-stream">
         {/* Results Summary Verdict & Panel Steel Breakdown */}
         <ResultsSummary
@@ -290,8 +294,7 @@ function MainCalculatorApp() {
         inputs={inputs}
         onChange={setInputs}
         onApplyPreset={handleApplyPreset}
-        onNewBlank={handleNewBlankAnalysis}
-        onClearInputs={handleClearCurrentInputs}
+        onResetToDefaults={handleResetToDefaults}
       />
 
       {/* Saved History Drawer */}

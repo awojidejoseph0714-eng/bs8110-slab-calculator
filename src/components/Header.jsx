@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sliders, History, Download, Sun, Moon, Sparkles, FilePlus, Save } from 'lucide-react';
+import { Sliders, Plus, History, Sun, Moon, Printer, Sparkles } from 'lucide-react';
 
 export default function Header({
   theme,
@@ -15,75 +15,41 @@ export default function Header({
   return (
     <header className="framer-header">
       <div className="brand-title-group">
-        <div className="brand-icon-wrapper">
-          <span>BS</span>
-        </div>
+        <div className="brand-icon-wrapper">CC</div>
         <div>
-          <h1 className="brand-h1">BS 8110 Slab Studio</h1>
-          <span className="brand-badge">Notion Minimal · BS 8110-1:1997</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h1 className="brand-h1">CrossCheck</h1>
+            <span className="brand-badge">BS 8110-1:1997</span>
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+            Hand-Calculation Parity Tool
+          </div>
         </div>
       </div>
 
       <div className="header-actions">
-        <button
-          className="btn-framer btn-primary"
-          onClick={onOpenParamsModal}
-          title="Open Modal to Edit Slab Parameters"
-        >
-          <Sliders size={14} />
-          <span>Edit Parameters</span>
+        <button className="btn-framer btn-primary" onClick={onOpenParamsModal} title="Edit Slab Parameters">
+          <Sliders size={14} /> Edit Params
         </button>
 
-        <button
-          className="btn-framer"
-          onClick={onSaveAnalysis}
-          title="Save analysis result to history"
-        >
-          <Save size={14} />
-          <span>Save</span>
+        <button className="btn-framer" onClick={onOpenPresets} title="Load Preset Templates">
+          <Sparkles size={14} /> Presets
         </button>
 
-        <button
-          className="btn-framer btn-ghost"
-          onClick={onNewBlankAnalysis}
-          title="Start a new blank analysis session"
-        >
-          <FilePlus size={14} />
-          <span>New</span>
+        <button className="btn-framer" onClick={onNewBlankAnalysis} title="Start New Calculation">
+          <Plus size={14} /> New Slab
         </button>
 
-        <button
-          className="btn-framer btn-ghost"
-          onClick={onOpenPresets}
-          title="Load Standard Preset Templates"
-        >
-          <Sparkles size={14} />
-          <span>Presets</span>
+        <button className="btn-framer" onClick={onOpenHistory} title="View Saved Workbooks">
+          <History size={14} /> History ({historyCount})
         </button>
 
-        <button
-          className="btn-framer btn-ghost"
-          onClick={onOpenHistory}
-          title="Saved Calculation History"
-        >
-          <History size={14} />
-          <span>History ({historyCount})</span>
+        <button className="btn-framer btn-ghost" onClick={onPrintReport} title="Print Calculation Sheet">
+          <Printer size={14} />
         </button>
 
-        <button
-          className="btn-framer btn-ghost"
-          onClick={onPrintReport}
-          title="Export PDF / Print Report"
-        >
-          <Download size={14} />
-        </button>
-
-        <button
-          className="btn-framer btn-ghost"
-          onClick={toggleTheme}
-          title="Toggle Light/Dark B/W Theme"
-        >
-          {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+        <button className="btn-framer btn-ghost" onClick={toggleTheme} title="Toggle Theme">
+          {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
         </button>
       </div>
     </header>
