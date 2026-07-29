@@ -330,7 +330,7 @@ function solveOptimalSpacing(As_req, b, d, h, barDia) {
 }
 
 /**
- * Solve Single Section Flexure displaying calculated z_raw alongside capped design z
+ * Solve Single Section Flexure formatting As_calc, As_min, As_req with decimals
  */
 function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy, initialBarDia }) {
   const minPercentage = fy <= 250 ? AppCalculationConstants.minSteelFactorFy250 : AppCalculationConstants.minSteelFactorFy460;
@@ -342,12 +342,12 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
     const z_cap = AppCalculationConstants.leverArmCap * d;
     const workingLines = [
       `M = 0.00 kNm/m`,
-      `As,calc = 0 mm²/m`,
+      `As,calc = 0.00 mm²/m`,
       `z_calc = 0.95d = ${z_cap.toFixed(1)} mm`,
-      `As,min (${minPercentText} bd) = ${minPercentage} × 1000 × ${d.toFixed(0)} = ${Math.round(As_min)} mm²/m`,
-      `Notice: Calculated As,req (0 mm²/m) is less than As,min (${Math.round(As_min)} mm²/m). Minimum code steel As,min will be used as As,req.`,
-      `As,req = ${Math.round(As_min)} mm²/m (governed by As,min)`,
-      `Area Provided (Table): ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m (closest area ≥ ${Math.round(As_min + 100)} mm²/m, s ≤ ${autoSteel.maxSpacingLimit}mm)`
+      `As,min (${minPercentText} bd) = ${minPercentage} × 1000 × ${d.toFixed(0)} = ${As_min.toFixed(2)} mm²/m`,
+      `Notice: Calculated As,req (0.00 mm²/m) is less than As,min (${As_min.toFixed(2)} mm²/m). Minimum code steel As,min will be used as As,req.`,
+      `As,req = ${As_min.toFixed(2)} mm²/m (governed by As,min)`,
+      `Area Provided (Table): ${autoSteel.barDetail} → As,prov = ${autoSteel.As_prov.toFixed(1)} mm²/m (closest area ≥ ${(As_min + 100).toFixed(2)} mm²/m, s ≤ ${autoSteel.maxSpacingLimit}mm)`
     ];
 
     return {
@@ -366,7 +366,7 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
       As_req: As_min,
       governingSource: 'Minimum',
       isAsCalcInsufficient: true,
-      insufficientMessage: `Calculated As,calc (0 mm²/m) is insufficient (< As,min ${Math.round(As_min)} mm²/m). As,min = ${Math.round(As_min)} mm²/m will be used as As,req.`,
+      insufficientMessage: `Calculated As,calc (0.00 mm²/m) is insufficient (< As,min ${As_min.toFixed(2)} mm²/m). As,min = ${As_min.toFixed(2)} mm²/m will be used as As,req.`,
       As_prov: autoSteel.As_prov,
       margin: autoSteel.margin,
       barDia: autoSteel.barDia,
@@ -428,12 +428,12 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
     ? `z_calc = d[0.5 + √(0.25 − ${K.toFixed(3)}/0.9)] = ${z_raw.toFixed(1)}mm (${(z_raw/d).toFixed(3)}d) → Capped at 0.95d limit: z = ${z.toFixed(1)}mm`
     : `z_calc = d[0.5 + √(0.25 − ${K.toFixed(3)}/0.9)] = ${z_raw.toFixed(1)}mm → z = ${z.toFixed(1)}mm (≤ 0.95d limit of ${z_cap.toFixed(1)}mm)`;
 
-  // As,calc calculation using design z
+  // As,calc calculation with exact decimals
   const As_calc = (M * 1e6) / (0.95 * fy * z);
-  const As_calc_working = `As,calc = (${M.toFixed(2)}×10⁶) / (0.95×${fy}×${z.toFixed(1)}) = ${Math.round(As_calc)} mm²/m`;
+  const As_calc_working = `As,calc = (${M.toFixed(2)}×10⁶) / (0.95×${fy}×${z.toFixed(1)}) = ${As_calc.toFixed(2)} mm²/m`;
 
-  // As,min calculation using EFFECTIVE DEPTH d
-  const As_min_working = `As,min (${minPercentText} bd) = ${minPercentage} × 1000 × ${d.toFixed(0)} = ${Math.round(As_min)} mm²/m`;
+  // As,min calculation with exact decimals
+  const As_min_working = `As,min (${minPercentText} bd) = ${minPercentage} × 1000 × ${d.toFixed(0)} = ${As_min.toFixed(2)} mm²/m`;
 
   // Check if As,calc is insufficient
   const isAsCalcInsufficient = As_calc < As_min;
@@ -444,18 +444,18 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
   let insufficientMessage = '';
 
   if (isAsCalcInsufficient) {
-    insufficientMessage = `Calculated As,calc (${Math.round(As_calc)} mm²/m) is insufficient (< As,min ${Math.round(As_min)} mm²/m). Minimum code steel As,min = ${Math.round(As_min)} mm²/m will be used as As,req.`;
-    comparisonWorking = `Notice: Calculated As,calc (${Math.round(As_calc)} mm²/m) is insufficient because it is less than As,min (${Math.round(As_min)} mm²/m). Minimum steel As,min will be used as As,req.`;
+    insufficientMessage = `Calculated As,calc (${As_calc.toFixed(2)} mm²/m) is insufficient (< As,min ${As_min.toFixed(2)} mm²/m). Minimum code steel As,min = ${As_min.toFixed(2)} mm²/m will be used as As,req.`;
+    comparisonWorking = `Notice: Calculated As,calc (${As_calc.toFixed(2)} mm²/m) is insufficient because it is less than As,min (${As_min.toFixed(2)} mm²/m). Minimum steel As,min will be used as As,req.`;
   } else {
-    insufficientMessage = `Calculated As,calc (${Math.round(As_calc)} mm²/m) is sufficient (≥ As,min ${Math.round(As_min)} mm²/m). As,req = ${Math.round(As_calc)} mm²/m.`;
-    comparisonWorking = `As,calc (${Math.round(As_calc)} mm²/m) ≥ As,min (${Math.round(As_min)} mm²/m) → As,calc governs as As,req.`;
+    insufficientMessage = `Calculated As,calc (${As_calc.toFixed(2)} mm²/m) is sufficient (≥ As,min ${As_min.toFixed(2)} mm²/m). As,req = ${As_calc.toFixed(2)} mm²/m.`;
+    comparisonWorking = `As,calc (${As_calc.toFixed(2)} mm²/m) ≥ As,min (${As_min.toFixed(2)} mm²/m) → As,calc governs as As,req.`;
   }
 
-  const As_req_working = `As,req = ${Math.round(As_req)} mm²/m   (governed by ${governingSource})`;
+  const As_req_working = `As,req = ${As_req.toFixed(2)} mm²/m   (governed by ${governingSource})`;
 
   // Spacing & As,prov directly from BS 8110 Rebar Area Table
   const autoSteel = solveOptimalSpacing(As_req, b, d, h, initialBarDia);
-  const spacing_working = `Area Provided (BS 8110 Table): ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m (closest table value ≥ ${Math.round(As_req + 100)} mm²/m, s ≤ ${autoSteel.maxSpacingLimit}mm)`;
+  const spacing_working = `Area Provided (BS 8110 Table): ${autoSteel.barDetail} → As,prov = ${autoSteel.As_prov.toFixed(1)} mm²/m (closest table value ≥ ${(As_req + 100).toFixed(2)} mm²/m, s ≤ ${autoSteel.maxSpacingLimit}mm)`;
 
   const workingLines = [
     K_working,
@@ -721,7 +721,7 @@ export function calculateBS8110Slab(inputs) {
       `Base span/d ratio = ${basicSpanToDepth} (${isTwoWayRestrained ? 'Two-Way Restrained' : isTwoWaySS ? 'Two-Way Simply Supported' : isOneWay ? 'One-Way Solid' : 'Cantilever'})`,
       `Assumed Service Load ns = n / 1.5 = ${n.toFixed(2)} / 1.5 = ${ns.toFixed(2)} kN/m²`,
       `Service Moment Msx,service = βsx × ns × lx² = ${Msx_service.toFixed(2)} kNm/m`,
-      `Service Tension Stress fs = (2/3) × ${fy} × (${Math.round(flexureShortMidspan.As_req)} / ${Math.round(flexureShortMidspan.As_prov)}) = ${fs.toFixed(1)} N/mm²`,
+      `Service Tension Stress fs = (2/3) × ${fy} × (${flexureShortMidspan.As_req.toFixed(2)} / ${flexureShortMidspan.As_prov.toFixed(1)}) = ${fs.toFixed(1)} N/mm²`,
       `M_service / (b.d²) = (${Msx_service.toFixed(2)}×10⁶) / (1000×${dx.toFixed(0)}²) = ${M_bd2_service.toFixed(3)} N/mm²`,
       `Modification Factor F1 = 0.55 + (477 - ${fs.toFixed(1)}) / [120 × (0.9 + ${M_bd2_service.toFixed(3)})] = ${F1_raw.toFixed(2)} (capped max 2.0 → ${F1.toFixed(2)})`,
       `Allowable span/d = ${basicSpanToDepth} × ${F1.toFixed(2)} = ${allowableSpanToDepth.toFixed(2)}`,

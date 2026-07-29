@@ -172,7 +172,7 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
         </div>
       </div>
 
-      {/* 3. FLEXURAL REINFORCEMENT SUMMARY (SEPARATE As,calc & As,min & BS 8110 TABLE LOOKUP & LEVER ARM Z) */}
+      {/* 3. FLEXURAL REINFORCEMENT SUMMARY (EXACT DECIMALS FOR As,calc & As,min & As,req) */}
       <div className="framer-card">
         <div className="card-title-row">
           <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>2. Flexural Steel Area & BS 8110 Table Spacing</h3>
@@ -222,12 +222,12 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
                     <div>
                       Design z used: <strong>{sec.z.toFixed(1)}mm</strong> {sec.isZCapped && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(capped 0.95d)</span>}
                     </div>
-                    <div>As calc: <strong>{Math.round(sec.As_calc)} mm²/m</strong></div>
-                    <div>As min: <strong>{Math.round(sec.As_min)} mm²/m</strong></div>
-                    <div>Governing As req: <strong>{Math.round(sec.As_req)} mm²/m</strong> <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({sec.governingSource})</span></div>
+                    <div>As calc: <strong>{sec.As_calc.toFixed(2)} mm²/m</strong></div>
+                    <div>As min: <strong>{sec.As_min.toFixed(2)} mm²/m</strong></div>
+                    <div>Governing As req: <strong>{sec.As_req.toFixed(2)} mm²/m</strong> <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({sec.governingSource})</span></div>
                     <div>Solved Spacing (Table): <strong>{sec.barDetail}</strong></div>
-                    <div>As prov (Table): <strong>{Math.round(sec.As_prov)} mm²/m</strong></div>
-                    <div>Margin (ΔAs ≥ 100): <strong>+{Math.round(sec.margin)} mm²/m</strong></div>
+                    <div>As prov (Table): <strong>{sec.As_prov.toFixed(1)} mm²/m</strong></div>
+                    <div>Margin (ΔAs ≥ 100): <strong>+{sec.margin.toFixed(2)} mm²/m</strong></div>
                   </div>
                 </div>
               )}
