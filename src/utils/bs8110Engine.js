@@ -269,9 +269,6 @@ function getTable315Coeffs(panelType, lyOverLxRaw) {
 
 /**
  * AUTOMATIC SPACING SOLVER FROM REBAR AREA TABLE
- * Selects area provided directly from the REBAR_AREA_TABLE column for desired bar diameter.
- * Finds closest area value to As_req that is MORE than As_req + 100 mm²/m (As_prov >= As_req + 100)
- * and satisfies maximum spacing limit s <= min(3h, 400mm).
  */
 function solveOptimalSpacing(As_req, b, d, h, barDia) {
   const standardSpacings = AppCalculationConstants.standardSpacings_mm;
@@ -333,19 +330,20 @@ function solveOptimalSpacing(As_req, b, d, h, barDia) {
 }
 
 /**
- * Solve Single Section Flexure with Separate As,calc & As,min (Using Effective Depth d for As,min = 0.13%bd or 0.24%bd)
+ * Solve Single Section Flexure displaying calculated z_raw alongside capped design z
  */
 function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy, initialBarDia }) {
-  // As,min factor: 0.24% bd for fy=250, 0.13% bd for fy=460 (d = effective depth for that section)
   const minPercentage = fy <= 250 ? AppCalculationConstants.minSteelFactorFy250 : AppCalculationConstants.minSteelFactorFy460;
   const minPercentText = fy <= 250 ? '0.24%' : '0.13%';
-  const As_min = minPercentage * b * d; // Calculated using EFFECTIVE DEPTH d
+  const As_min = minPercentage * b * d;
 
   if (M <= 0) {
     const autoSteel = solveOptimalSpacing(As_min, b, d, h, initialBarDia);
+    const z_cap = AppCalculationConstants.leverArmCap * d;
     const workingLines = [
       `M = 0.00 kNm/m`,
       `As,calc = 0 mm²/m`,
+      `z_calc = 0.95d = ${z_cap.toFixed(1)} mm`,
       `As,min (${minPercentText} bd) = ${minPercentage} × 1000 × ${d.toFixed(0)} = ${Math.round(As_min)} mm²/m`,
       `Notice: Calculated As,req (0 mm²/m) is less than As,min (${Math.round(As_min)} mm²/m). Minimum code steel As,min will be used as As,req.`,
       `As,req = ${Math.round(As_min)} mm²/m (governed by As,min)`,
@@ -359,7 +357,10 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
       d,
       K: 0,
       overReinforced: false,
-      z: 0.95 * d,
+      z_raw: z_cap,
+      z: z_cap,
+      z_cap,
+      isZCapped: false,
       As_calc: 0,
       As_min,
       As_req: As_min,
@@ -396,7 +397,10 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
       K,
       overReinforced: true,
       overReinforcedMessage: `K = ${K.toFixed(3)} > 0.156 (Compression steel or depth redesign required)`,
+      z_raw: null,
       z: null,
+      z_cap: 0.95 * d,
+      isZCapped: false,
       As_calc: null,
       As_min,
       As_req: null,
@@ -413,12 +417,18 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
     };
   }
 
-  // z calculation capped at 0.95d
+  // z calculation displaying calculated z_raw alongside capped design z
   const z_factor = 0.5 + Math.sqrt(Math.max(0, 0.25 - K / 0.9));
-  const z = Math.min(AppCalculationConstants.leverArmCap * d, d * z_factor);
-  const z_working = `z = d[0.5 + √(0.25 − ${K.toFixed(3)}/0.9)] = ${z.toFixed(1)}mm (capped at 0.95d = ${(0.95 * d).toFixed(1)}mm)`;
+  const z_raw = d * z_factor;
+  const z_cap = AppCalculationConstants.leverArmCap * d;
+  const z = Math.min(z_cap, z_raw);
+  const isZCapped = z_raw > z_cap;
 
-  // As,calc calculation separately
+  const z_working = isZCapped
+    ? `z_calc = d[0.5 + √(0.25 − ${K.toFixed(3)}/0.9)] = ${z_raw.toFixed(1)}mm (${(z_raw/d).toFixed(3)}d) → Capped at 0.95d limit: z = ${z.toFixed(1)}mm`
+    : `z_calc = d[0.5 + √(0.25 − ${K.toFixed(3)}/0.9)] = ${z_raw.toFixed(1)}mm → z = ${z.toFixed(1)}mm (≤ 0.95d limit of ${z_cap.toFixed(1)}mm)`;
+
+  // As,calc calculation using design z
   const As_calc = (M * 1e6) / (0.95 * fy * z);
   const As_calc_working = `As,calc = (${M.toFixed(2)}×10⁶) / (0.95×${fy}×${z.toFixed(1)}) = ${Math.round(As_calc)} mm²/m`;
 
@@ -464,7 +474,10 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
     d,
     K,
     overReinforced: false,
+    z_raw,
     z,
+    z_cap,
+    isZCapped,
     As_calc,
     As_min,
     As_req,
@@ -561,15 +574,12 @@ export function calculateBS8110Slab(inputs) {
     n = Math.max(0.1, Number(designLoadNInput) || 12.0);
   }
 
-  // Map caseNumber to panelCondition
   let resolvedCondition = panelCondition;
   if (caseNumber && EDGE_CONDITION_CASES[caseNumber - 1]) {
     resolvedCondition = EDGE_CONDITION_CASES[caseNumber - 1].id;
   }
 
-  // -------------------------------------------------------------
-  // STEP 1: BENDING MOMENTS
-  // -------------------------------------------------------------
+  // BENDING MOMENTS
   let Msx = 0;
   let Mhx = 0;
   let Msy = 0;
@@ -595,7 +605,6 @@ export function calculateBS8110Slab(inputs) {
     Msx = momentCoeffs.bsx * n * Math.pow(lx, 2);
     Msy = momentCoeffs.bsy * n * Math.pow(lx, 2);
   } else {
-    // Two-Way Restrained (BS 8110 Table 3.14)
     momentCoeffs = getTable314Coeffs(resolvedCondition, lyOverLxRaw);
     shearCoeffs = getTable315Coeffs(resolvedCondition, lyOverLxRaw);
     Msx = momentCoeffs.bsx * n * Math.pow(lx, 2);
@@ -606,9 +615,7 @@ export function calculateBS8110Slab(inputs) {
 
   const M_max = Math.max(Msx, Mhx, Msy, Mhy);
 
-  // -------------------------------------------------------------
-  // STEP 2: FLEXURE DESIGN PER DIRECTION (dx vs dy)
-  // -------------------------------------------------------------
+  // FLEXURE DESIGN
   const flexureShortMidspan = solveFlexureSection({
     locationName: 'Short Span Midspan (+ve Msx)',
     directionName: 'ShortSpan',
@@ -636,9 +643,7 @@ export function calculateBS8110Slab(inputs) {
   const flexurePass = flexureShortMidspan.pass && flexureShortSupport.pass && flexureLongMidspan.pass && flexureLongSupport.pass;
   const hasOverReinforced = flexureShortMidspan.overReinforced || flexureShortSupport.overReinforced || flexureLongMidspan.overReinforced || flexureLongSupport.overReinforced;
 
-  // -------------------------------------------------------------
-  // STEP 3: OPTIONAL SHEAR CHECK (OFF BY DEFAULT)
-  // -------------------------------------------------------------
+  // SHEAR CHECK
   let shearCheck = null;
   if (enableShearCheck && (isTwoWayRestrained || isTwoWaySS)) {
     const Vx = (shearCoeffs.bvx || 0.5) * n * lx;
@@ -679,9 +684,7 @@ export function calculateBS8110Slab(inputs) {
     };
   }
 
-  // -------------------------------------------------------------
-  // STEP 4: SERVICEABILITY DEFLECTION CHECK
-  // -------------------------------------------------------------
+  // DEFLECTION CONTROL
   let basicSpanToDepth = 26;
   if (isTwoWaySS || isOneWay) {
     basicSpanToDepth = 20;

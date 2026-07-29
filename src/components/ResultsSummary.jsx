@@ -172,7 +172,7 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
         </div>
       </div>
 
-      {/* 3. FLEXURAL REINFORCEMENT SUMMARY (SEPARATE As,calc & As,min & BS 8110 TABLE LOOKUP) */}
+      {/* 3. FLEXURAL REINFORCEMENT SUMMARY (SEPARATE As,calc & As,min & BS 8110 TABLE LOOKUP & LEVER ARM Z) */}
       <div className="framer-card">
         <div className="card-title-row">
           <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>2. Flexural Steel Area & BS 8110 Table Spacing</h3>
@@ -215,6 +215,13 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
                   )}
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', background: 'var(--bg-card-alt)', padding: '10px 12px', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                    <div>K factor: <strong>{sec.K.toFixed(3)}</strong></div>
+                    <div>
+                      Calculated z: <strong>{sec.z_raw.toFixed(1)}mm</strong> <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>({(sec.z_raw / sec.d).toFixed(3)}d)</span>
+                    </div>
+                    <div>
+                      Design z used: <strong>{sec.z.toFixed(1)}mm</strong> {sec.isZCapped && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(capped 0.95d)</span>}
+                    </div>
                     <div>As calc: <strong>{Math.round(sec.As_calc)} mm²/m</strong></div>
                     <div>As min: <strong>{Math.round(sec.As_min)} mm²/m</strong></div>
                     <div>Governing As req: <strong>{Math.round(sec.As_req)} mm²/m</strong> <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({sec.governingSource})</span></div>
