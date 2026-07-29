@@ -15,14 +15,14 @@ export default function Header({
   return (
     <header className="framer-header">
       <div className="brand-title-group">
-        <div className="brand-icon-wrapper">CC</div>
+        <img src="/logo.svg" alt="SlabCheck Logo" style={{ width: '38px', height: '38px', borderRadius: '6px' }} />
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h1 className="brand-h1">CrossCheck</h1>
+            <h1 className="brand-h1">SlabCheck</h1>
             <span className="brand-badge">BS 8110-1:1997</span>
           </div>
           <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-            Hand-Calculation Parity Tool
+            HAND-CALC VERIFIED
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 /**
- * CrossCheck — BS 8110 Slab Calculation Engine & Constants
+ * CrossCheck / SlabCheck — BS 8110 Slab Calculation Engine & Constants
  * Hand-Calculation Parity Cross-Checker for Structural Engineers
  */
 
@@ -7,8 +7,8 @@ export const AppCalculationConstants = {
   standardSpacings_mm: [300, 250, 200, 175, 150, 125, 100, 75, 50],
   overReinforcedThresholdK: 0.156,
   leverArmCap: 0.95,
-  minSteelFactorFy460: 0.0013, // 0.13% bh
-  minSteelFactorFy250: 0.0024, // 0.24% bh
+  minSteelFactorFy460: 0.0013, // 0.13% bd (using effective depth d)
+  minSteelFactorFy250: 0.0024, // 0.24% bd (using effective depth d)
   assumedServiceLoadFactor: 1.5,
   bufferMargin_mm2: 100,
   validationBounds: {
@@ -274,19 +274,16 @@ function getTable315Coeffs(panelType, lyOverLxRaw) {
  * and satisfies maximum spacing limit s <= min(3h, 400mm).
  */
 function solveOptimalSpacing(As_req, b, d, h, barDia) {
-  const standardSpacings = AppCalculationConstants.standardSpacings_mm; // [300, 250, 200, 175, 150, 125, 100, 75, 50]
+  const standardSpacings = AppCalculationConstants.standardSpacings_mm;
   const maxSpacingLimit = Math.min(400, Math.floor(3 * h));
   const validSpacings = standardSpacings.filter((s) => s <= maxSpacingLimit);
 
-  const targetAsProvMin = As_req + AppCalculationConstants.bufferMargin_mm2; // As_req + 100
+  const targetAsProvMin = As_req + AppCalculationConstants.bufferMargin_mm2;
   let chosenBarDia = barDia;
   let chosenSpacing = 150;
   let As_prov = 0;
 
   let tableForBar = REBAR_AREA_TABLE[chosenBarDia] || REBAR_AREA_TABLE[12];
-
-  // Evaluate spacings from largest spacing (smallest area) to smallest spacing (largest area)
-  // To find the CLOSEST value to As_req that is STILL >= As_req + 100
   const candidateSpacings = [...validSpacings].sort((a, b) => b - a);
 
   for (let s of candidateSpacings) {
@@ -298,7 +295,6 @@ function solveOptimalSpacing(As_req, b, d, h, barDia) {
     }
   }
 
-  // If no spacing for current bar diameter satisfies As_prov >= As_req + 100, step up bar diameter
   if (As_prov < targetAsProvMin) {
     const availableBars = [6, 8, 10, 12, 16, 20, 25, 32, 40];
     const currentIndex = availableBars.indexOf(barDia);
@@ -337,20 +333,20 @@ function solveOptimalSpacing(As_req, b, d, h, barDia) {
 }
 
 /**
- * Solve Single Section Flexure with Separate As,calc & As,min & Clear Insufficient Message
+ * Solve Single Section Flexure with Separate As,calc & As,min (Using Effective Depth d for As,min = 0.13%bd or 0.24%bd)
  */
 function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy, initialBarDia }) {
-  // As,min factor: 0.24% bh for fy=250, 0.13% bh for fy=460
-  const minPercentage = fy <= 250 ? 0.0024 : 0.0013;
+  // As,min factor: 0.24% bd for fy=250, 0.13% bd for fy=460 (d = effective depth for that section)
+  const minPercentage = fy <= 250 ? AppCalculationConstants.minSteelFactorFy250 : AppCalculationConstants.minSteelFactorFy460;
   const minPercentText = fy <= 250 ? '0.24%' : '0.13%';
-  const As_min = minPercentage * b * h;
+  const As_min = minPercentage * b * d; // Calculated using EFFECTIVE DEPTH d
 
   if (M <= 0) {
     const autoSteel = solveOptimalSpacing(As_min, b, d, h, initialBarDia);
     const workingLines = [
       `M = 0.00 kNm/m`,
       `As,calc = 0 mm²/m`,
-      `As,min = ${minPercentText} × b × h = ${minPercentage} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`,
+      `As,min (${minPercentText} bd) = ${minPercentage} × 1000 × ${d.toFixed(0)} = ${Math.round(As_min)} mm²/m`,
       `Notice: Calculated As,req (0 mm²/m) is less than As,min (${Math.round(As_min)} mm²/m). Minimum code steel As,min will be used as As,req.`,
       `As,req = ${Math.round(As_min)} mm²/m (governed by As,min)`,
       `Area Provided (Table): ${autoSteel.barDetail} → As,prov = ${Math.round(autoSteel.As_prov)} mm²/m (closest area ≥ ${Math.round(As_min + 100)} mm²/m, s ≤ ${autoSteel.maxSpacingLimit}mm)`
@@ -426,8 +422,8 @@ function solveFlexureSection({ locationName, directionName, M, b, d, h, fcu, fy,
   const As_calc = (M * 1e6) / (0.95 * fy * z);
   const As_calc_working = `As,calc = (${M.toFixed(2)}×10⁶) / (0.95×${fy}×${z.toFixed(1)}) = ${Math.round(As_calc)} mm²/m`;
 
-  // As,min calculation separately
-  const As_min_working = `As,min (${minPercentText} bh) = ${minPercentage} × 1000 × ${h} = ${Math.round(As_min)} mm²/m`;
+  // As,min calculation using EFFECTIVE DEPTH d
+  const As_min_working = `As,min (${minPercentText} bd) = ${minPercentage} × 1000 × ${d.toFixed(0)} = ${Math.round(As_min)} mm²/m`;
 
   // Check if As,calc is insufficient
   const isAsCalcInsufficient = As_calc < As_min;
