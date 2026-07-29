@@ -1,4 +1,4 @@
-/* Notion-style Minimal Monochrome Design System - BS 8110 Slab Studio (Mobile First) */
+/* Notion-style Minimal Monochrome Design System - BS 8110 Slab Studio (Mobile First & Hamburger Nav) */
 :root {
   /* LIGHT MODE (DEFAULT B/W) */
   --bg-primary: #ffffff;
@@ -94,15 +94,15 @@ html, body, #root {
   }
 }
 
-/* Header Navbar - Mobile Responsive */
+/* Header Navbar - Mobile Responsive with Hamburger */
 .framer-header {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
+  padding: 12px 14px;
 }
 
 @media (min-width: 640px) {
@@ -114,23 +114,17 @@ html, body, #root {
   }
 }
 
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
 .brand-title-group {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.brand-icon-wrapper {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  border-radius: var(--radius-sm);
-  background: var(--text-main);
-  color: var(--bg-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
 }
 
 .brand-h1 {
@@ -158,25 +152,95 @@ html, body, #root {
   white-space: nowrap;
 }
 
-.header-actions {
+/* Mobile Header Right Actions */
+.mobile-header-right {
   display: flex;
   align-items: center;
   gap: 6px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 2px;
-  width: 100%;
 }
 
 @media (min-width: 640px) {
-  .header-actions {
-    width: auto;
-    overflow-x: visible;
-    padding-bottom: 0;
+  .mobile-header-right {
+    display: none;
   }
 }
 
-/* Touch-Friendly Minimal Buttons */
+.btn-hamburger {
+  padding: 8px 10px;
+  min-height: 38px;
+  min-width: 38px;
+}
+
+.btn-mobile-edit {
+  font-size: 0.775rem;
+  padding: 6px 10px;
+  min-height: 38px;
+}
+
+/* Desktop Actions Row vs Mobile Menu */
+.desktop-actions-row {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .desktop-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: auto;
+  }
+}
+
+/* Mobile Slide-Down Dropdown Menu */
+.mobile-dropdown-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  animation: slideDown 0.15s ease-out;
+}
+
+@media (min-width: 640px) {
+  .mobile-dropdown-menu {
+    display: none;
+  }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mobile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: var(--bg-card-alt);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mobile-menu-item:active {
+  background: var(--bg-surface-hover);
+  transform: scale(0.99);
+}
+
+.mobile-menu-item.primary {
+  background: var(--text-main);
+  color: var(--bg-primary);
+  border-color: var(--text-main);
+}
+
+/* Touch-Friendly Buttons */
 .btn-framer {
   display: inline-flex;
   align-items: center;
