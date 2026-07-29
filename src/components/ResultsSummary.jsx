@@ -1,7 +1,7 @@
-import React from 'react';
-import { CheckCircle2, AlertTriangle, Save, FileSpreadsheet, Sliders } from 'lucide-react';
+import React, { useState } from 'react';
+import { CheckCircle2, AlertTriangle, Save, FileSpreadsheet, Sliders, Shield, Eye } from 'lucide-react';
 
-export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsModal }) {
+export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsModal, onToggleShear, enableShearCheck }) {
   if (!result) return null;
 
   if (result.isBlank) {
@@ -21,212 +21,222 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
 
   const { moments, flexureParts, shearCheck, deflection, overallPass, inputs } = result;
 
+  const sectionsList = [
+    flexureParts.shortMidspan,
+    inputs.slabType === 'two_way_restrained' || inputs.slabType === 'cantilever' ? flexureParts.shortSupport : null,
+    inputs.slabType !== 'one_way' && inputs.slabType !== 'cantilever' ? flexureParts.longMidspan : null,
+    inputs.slabType === 'two_way_restrained' ? flexureParts.longSupport : null
+  ].filter(Boolean);
+
   return (
-    <div className="framer-card">
-      <div className="card-title-row">
-        <div>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-dim)' }}>
-            Slab Analysis & Design Verdict
-          </div>
-          <h2 className="card-heading" style={{ fontSize: '1.15rem', marginTop: '2px' }}>
-            {inputs.slabType.toUpperCase().replace(/_/g, ' ')}
-            {inputs.slabType === 'two_way_restrained' && ` (${inputs.panelCondition.replace(/_/g, ' ')})`}
-          </h2>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn-framer" onClick={onOpenParamsModal}>
-            <Sliders size={14} /> Edit Parameters
-          </button>
-          <button className="btn-framer btn-primary" onClick={onSaveToHistory}>
-            <Save size={14} /> Save
-          </button>
-        </div>
-      </div>
-
-      {/* Quick Summary Pill Bar */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', background: 'var(--bg-card-alt)', padding: '12px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
-        <div>Span lx: <strong>{inputs.lx}m</strong></div>
-        <div>ly: <strong>{inputs.ly.toFixed(1)}m</strong></div>
-        <div>Aspect ly/lx: <strong>{inputs.lyOverLxRaw.toFixed(2)}</strong></div>
-        <div style={{ color: 'var(--text-main)', fontWeight: 700, border: '1px solid var(--border-subtle)', padding: '0 6px', borderRadius: '4px' }}>
-          Table 3.14/3.15 Upward Lookup Ratio = {inputs.effectiveRatio}
-        </div>
-        <div>Thickness h: <strong>{inputs.h}mm</strong> (d={inputs.d_short}mm)</div>
-        <div>UDL n: <strong>{result.n.toFixed(2)} kN/m²</strong></div>
-      </div>
-
-      {/* Overall Verdict Banner */}
-      <div className={`verdict-banner ${overallPass ? 'pass' : 'fail'}`}>
-        <div className="verdict-status-badge">
-          <div className="status-icon-circle">
-            {overallPass ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* 1. TOP SUMMARY CARD */}
+      <div className="framer-card">
+        <div className="card-title-row">
           <div>
-            <div className="verdict-title">
-              {overallPass ? 'SLAB DESIGN SATISFACTORY' : 'SLAB REVISION REQUIRED'}
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-dim)' }}>
+              Slab Analysis & Design Verdict
             </div>
-            <div className="verdict-subtitle">
-              {overallPass
-                ? `Section satisfies BS 8110-1:1997 flexure, shear, deflection, and (As,prov - As,req >= 100 mm²/m) margin rule.`
-                : `One or more structural checks failed. Review slab thickness or steel selection.`}
-            </div>
+            <h2 className="card-heading" style={{ fontSize: '1.15rem', marginTop: '2px' }}>
+              {inputs.slabType.toUpperCase().replace(/_/g, ' ')}
+              {inputs.slabType === 'two_way_restrained' && ` (${inputs.panelCondition.replace(/_/g, ' ')})`}
+            </h2>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn-framer" onClick={onOpenParamsModal}>
+              <Sliders size={14} /> Edit Parameters
+            </button>
+            <button className="btn-framer btn-primary" onClick={onSaveToHistory}>
+              <Save size={14} /> Save
+            </button>
           </div>
         </div>
 
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.825rem', textAlign: 'right' }}>
-          <div><strong>Max M:</strong> {result.M_max.toFixed(2)} kNm/m</div>
-          <div><strong>Max V:</strong> {result.V_max.toFixed(2)} kN/m</div>
+        {/* Quick Parameter Summary Bar */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', background: 'var(--bg-card-alt)', padding: '12px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+          <div>Span lx: <strong>{inputs.lx}m</strong></div>
+          {inputs.slabType !== 'one_way' && inputs.slabType !== 'cantilever' && (
+            <div>ly: <strong>{inputs.ly.toFixed(1)}m</strong> (ly/lx={inputs.lyOverLxRaw.toFixed(2)} → Table 3.14 ratio {inputs.effectiveRatio})</div>
+          )}
+          <div>Thickness h: <strong>{inputs.h}mm</strong> (dx={inputs.dx.toFixed(0)}mm, dy={inputs.dy.toFixed(0)}mm)</div>
+          <div>UDL n: <strong>{result.n.toFixed(2)} kN/m²</strong></div>
+          <div>fcu: <strong>{inputs.fcu} N/mm²</strong> · fy: <strong>{inputs.fy} N/mm²</strong></div>
+        </div>
+
+        {/* Overall Verdict Banner */}
+        <div className={`verdict-banner ${overallPass ? 'pass' : 'fail'}`}>
+          <div className="verdict-status-badge">
+            <div className="status-icon-circle">
+              {overallPass ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
+            </div>
+            <div>
+              <div className="verdict-title">
+                {overallPass ? 'SLAB DESIGN SATISFACTORY' : 'SLAB REVISION REQUIRED'}
+              </div>
+              <div className="verdict-subtitle">
+                {overallPass
+                  ? `Satisfies BS 8110-1:1997 flexure, deflection, and spacing buffer rules.`
+                  : `One or more structural checks failed. Review section depth or steel details.`}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.825rem', textAlign: 'right' }}>
+            <div><strong>Max M:</strong> {result.M_max.toFixed(2)} kNm/m</div>
+          </div>
         </div>
       </div>
 
-      {/* REINFORCEMENT & FLEXURE TABLE WITH (As_prov - As_req >= 100) MARGIN COLUMN */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-main)' }}>
-          Panel Reinforcement & Steel Margin Breakdown (As_prov - As_req ≥ 100 mm²/m)
+      {/* 2. BENDING MOMENTS (COMPACT 2x2 GRID FOR 2-WAY) */}
+      <div className="framer-card">
+        <div className="card-title-row">
+          <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>1. Panel Bending Moments (M = β · n · lx²)</h3>
+          <span className="clause-badge">BS 8110 Table 3.14</span>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>
-            <thead>
-              <tr style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-                <th style={{ padding: '8px 10px' }}>Location</th>
-                <th style={{ padding: '8px 10px' }}>Moment (kNm/m)</th>
-                <th style={{ padding: '8px 10px' }}>As req (mm²/m)</th>
-                <th style={{ padding: '8px 10px' }}>Auto-Solved Bar & Spacing</th>
-                <th style={{ padding: '8px 10px' }}>As prov (mm²/m)</th>
-                <th style={{ padding: '8px 10px' }}>Margin (ΔAs ≥ 100)</th>
-                <th style={{ padding: '8px 10px' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* Short Span Midspan */}
-              <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                <td style={{ padding: '8px 10px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
-                  Short Span Midspan (+ve Msx)
-                </td>
-                <td style={{ padding: '8px 10px' }}>{moments.Msx.toFixed(2)}</td>
-                <td style={{ padding: '8px 10px' }}>{Math.round(flexureParts.shortMidspan.As_governing_req)}</td>
-                <td style={{ padding: '8px 10px', fontWeight: 700 }}>
-                  {flexureParts.shortMidspan.barDetail}
-                </td>
-                <td style={{ padding: '8px 10px', fontWeight: 700 }}>
-                  {Math.round(flexureParts.shortMidspan.As_prov)}
-                </td>
-                <td style={{ padding: '8px 10px', fontWeight: 700 }}>
-                  +{Math.round(flexureParts.shortMidspan.margin)} mm²/m
-                </td>
-                <td style={{ padding: '8px 10px' }}>
-                  <span className={`check-pill ${flexureParts.shortMidspan.pass ? 'pass' : 'fail'}`}>
-                    {flexureParts.shortMidspan.pass ? 'PASS' : 'FAIL'}
-                  </span>
-                </td>
-              </tr>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+          {/* Short Span Midspan */}
+          <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px', background: 'var(--bg-card-alt)' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-dim)' }}>SHORT SPAN MIDSPAN (+ve Msx)</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 700, margin: '4px 0', fontFamily: 'var(--font-mono)' }}>
+              {moments.Msx.toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>kNm/m</span>
+            </div>
+            <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+              βsx = {moments.momentCoeffs.bsx.toFixed(3)} × {result.n.toFixed(1)} × {inputs.lx}²
+            </div>
+          </div>
 
-              {/* Long Span Midspan */}
-              {inputs.slabType !== 'one_way' && inputs.slabType !== 'cantilever' && (
-                <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                  <td style={{ padding: '8px 10px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
-                    Long Span Midspan (+ve Msy)
-                  </td>
-                  <td style={{ padding: '8px 10px' }}>{moments.Msy.toFixed(2)}</td>
-                  <td style={{ padding: '8px 10px' }}>{Math.round(flexureParts.longMidspan.As_governing_req)}</td>
-                  <td style={{ padding: '8px 10px', fontWeight: 700 }}>
-                    {flexureParts.longMidspan.barDetail}
-                  </td>
-                  <td style={{ padding: '8px 10px', fontWeight: 700 }}>
-                    {Math.round(flexureParts.longMidspan.As_prov)}
-                  </td>
-                  <td style={{ padding: '8px 10px', fontWeight: 700 }}>
-                    +{Math.round(flexureParts.longMidspan.margin)} mm²/m
-                  </td>
-                  <td style={{ padding: '8px 10px' }}>
-                    <span className={`check-pill ${flexureParts.longMidspan.pass ? 'pass' : 'fail'}`}>
-                      {flexureParts.longMidspan.pass ? 'PASS' : 'FAIL'}
-                    </span>
-                  </td>
-                </tr>
+          {/* Short Span Support */}
+          {moments.Mhx > 0 && (
+            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px', background: 'var(--bg-card-alt)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-dim)' }}>SHORT SPAN SUPPORT (-ve Mhx)</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 700, margin: '4px 0', fontFamily: 'var(--font-mono)' }}>
+                {moments.Mhx.toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>kNm/m</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                βhx = {moments.momentCoeffs.bhx.toFixed(3)} × {result.n.toFixed(1)} × {inputs.lx}²
+              </div>
+            </div>
+          )}
+
+          {/* Long Span Midspan */}
+          {moments.Msy > 0 && (
+            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px', background: 'var(--bg-card-alt)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-dim)' }}>LONG SPAN MIDSPAN (+ve Msy)</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 700, margin: '4px 0', fontFamily: 'var(--font-mono)' }}>
+                {moments.Msy.toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>kNm/m</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                βsy = {moments.momentCoeffs.bsy.toFixed(3)} × {result.n.toFixed(1)} × {inputs.lx}²
+              </div>
+            </div>
+          )}
+
+          {/* Long Span Support */}
+          {moments.Mhy > 0 && (
+            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px', background: 'var(--bg-card-alt)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-dim)' }}>LONG SPAN SUPPORT (-ve Mhy)</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 700, margin: '4px 0', fontFamily: 'var(--font-mono)' }}>
+                {moments.Mhy.toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>kNm/m</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                βhy = {moments.momentCoeffs.bhy.toFixed(3)} × {result.n.toFixed(1)} × {inputs.lx}²
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. FLEXURAL REINFORCEMENT DESIGN (FULL WORKED EQUATIONS PER SECTION) */}
+      <div className="framer-card">
+        <div className="card-title-row">
+          <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>2. Flexural Steel Design (Full Worked Equations)</h3>
+          <span className="clause-badge">BS 8110 Cl 3.4.4.4</span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {sectionsList.map((sec, idx) => (
+            <div
+              key={idx}
+              style={{
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '14px',
+                background: sec.overReinforced ? 'rgba(255, 0, 0, 0.04)' : 'var(--bg-card)'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                  {sec.locationName} (d = {sec.d.toFixed(0)}mm)
+                </div>
+                <span className={`check-pill ${sec.pass ? 'pass' : 'fail'}`}>
+                  {sec.pass ? 'PASS' : sec.overReinforced ? 'OVER-REINFORCED' : 'FAIL'}
+                </span>
+              </div>
+
+              {sec.overReinforced ? (
+                <div style={{ padding: '10px 12px', background: '#ffebee', border: '1px solid #ffcdd2', color: '#c62828', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                  <strong>OVER-REINFORCED SECTION (K &gt; 0.156):</strong> {sec.workingLines[0]}<br />
+                  {sec.workingLines[1]}<br />
+                  {sec.workingLines[2]}
+                </div>
+              ) : (
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--bg-card-alt)', padding: '10px 12px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                  {sec.workingLines.map((line, lIdx) => (
+                    <div key={lIdx} style={{ whiteSpace: 'pre-wrap' }}>
+                      {line}
+                    </div>
+                  ))}
+                </div>
               )}
-
-              {/* Support Hogging */}
-              {(inputs.slabType === 'two_way_restrained' || inputs.slabType === 'cantilever') && (
-                <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                  <td style={{ padding: '8px 10px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
-                    Support Continuous Edge (-ve Mhx)
-                  </td>
-                  <td style={{ padding: '8px 10px' }}>{moments.Mhx.toFixed(2)}</td>
-                  <td style={{ padding: '8px 10px' }}>{Math.round(flexureParts.shortSupport.As_governing_req)}</td>
-                  <td style={{ padding: '8px 10px', fontWeight: 700 }}>
-                    {flexureParts.shortSupport.barDetail}
-                  </td>
-                  <td style={{ padding: '8px 10px', fontWeight: 700 }}>
-                    {Math.round(flexureParts.shortSupport.As_prov)}
-                  </td>
-                  <td style={{ padding: '8px 10px', fontWeight: 700 }}>
-                    +{Math.round(flexureParts.shortSupport.margin)} mm²/m
-                  </td>
-                  <td style={{ padding: '8px 10px' }}>
-                    <span className={`check-pill ${flexureParts.shortSupport.pass ? 'pass' : 'fail'}`}>
-                      {flexureParts.shortSupport.pass ? 'PASS' : 'FAIL'}
-                    </span>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* 2 Main Checks: Shear & Deflection */}
-      <div className="checks-grid">
-        {/* SHEAR CARD */}
-        <div className={`check-card ${shearCheck.pass ? 'pass' : 'fail'}`}>
-          <div className="check-card-header">
-            <span>Slab Shear Stress (v) — Table 3.15</span>
-            <span className={`check-pill ${shearCheck.pass ? 'pass' : 'fail'}`}>
-              {shearCheck.pass ? 'PASS' : 'FAIL'}
-            </span>
-          </div>
-
-          <div>
-            <div className="check-main-val">
-              {shearCheck.v.toFixed(2)} <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>N/mm²</span>
-            </div>
-            <div className="check-sub-text">
-              Concrete Capacity v_c = {shearCheck.vc.toFixed(2)} N/mm² (Max Shear V = {result.V_max.toFixed(1)} kN/m)
-            </div>
-          </div>
-
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '6px', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-            <div>v ≤ v_c → Satisfactory (No links required in solid slab)</div>
-          </div>
+      {/* 4. DEFLECTION CONTROL CHECK */}
+      <div className="framer-card">
+        <div className="card-title-row">
+          <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>3. Deflection Control Check (Span / Effective Depth)</h3>
+          <span className={`check-pill ${deflection.pass ? 'pass' : 'fail'}`}>
+            {deflection.pass ? 'PASS' : 'FAIL'}
+          </span>
         </div>
 
-        {/* DEFLECTION CARD */}
-        <div className={`check-card ${deflection.pass ? 'pass' : 'fail'}`}>
-          <div className="check-card-header">
-            <span>Deflection (Short Span/d)</span>
-            <span className={`check-pill ${deflection.pass ? 'pass' : 'fail'}`}>
-              {deflection.pass ? 'PASS' : 'FAIL'}
-            </span>
-          </div>
-
-          <div>
-            <div className="check-main-val">
-              {deflection.actualSpanToDepth.toFixed(1)}{' '}
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                / {deflection.allowableSpanToDepth.toFixed(1)}
-              </span>
-            </div>
-            <div className="check-sub-text">
-              Actual Span/d ≤ Allowable Span/d
-            </div>
-          </div>
-
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '6px', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-            <div><strong>Basic Ratio:</strong> {deflection.basicSpanToDepth} · <strong>F1 Factor:</strong> {deflection.F1.toFixed(2)}</div>
-          </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--bg-card-alt)', padding: '12px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+          {deflection.workingLines.map((line, idx) => (
+            <div key={idx}>{line}</div>
+          ))}
         </div>
+      </div>
+
+      {/* 5. OPTIONAL SHEAR CHECK (OFF BY DEFAULT) */}
+      <div className="framer-card">
+        <div className="card-title-row">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Shield size={18} />
+            <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>4. Slab Shear Check (BS 8110 Table 3.15)</h3>
+          </div>
+
+          <button className={`btn-framer ${enableShearCheck ? 'btn-primary' : ''}`} onClick={onToggleShear}>
+            <Eye size={14} /> {enableShearCheck ? 'Hide Shear Check' : 'Check Shear'}
+          </button>
+        </div>
+
+        {!enableShearCheck ? (
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            Slab shear rarely governs under uniform loads. Tap <strong>Check Shear</strong> above to reveal Table 3.15 shear stress calculations.
+          </div>
+        ) : (
+          shearCheck && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--bg-card-alt)', padding: '12px', borderRadius: '4px', border: '1px solid var(--border-subtle)', marginTop: '8px' }}>
+              {shearCheck.workingLines.map((line, idx) => (
+                <div key={idx}>{line}</div>
+              ))}
+            </div>
+          )
+        )}
       </div>
     </div>
   );

@@ -6,20 +6,21 @@ import WorkingsAccordion from './components/WorkingsAccordion';
 import CrossSectionCanvas from './components/CrossSectionCanvas';
 import HistoryDrawer from './components/HistoryDrawer';
 import PresetTemplatesModal from './components/PresetTemplatesModal';
+import OnboardingModal from './components/OnboardingModal';
 import { calculateBS8110Slab, SLAB_PRESETS } from './utils/bs8110Engine';
 import { CheckCircle2 } from 'lucide-react';
 
 const DEFAULT_SLAB_INPUTS = {
   slabType: 'two_way_restrained',
-  panelCondition: 'interior',
+  panelCondition: 'one_long_discontinuous',
   
-  lxInput: 4.2,
-  lyInput: 5.2,
+  lxInput: 4.0,
+  lyInput: 5.0,
   
   loadMode: 'direct_n',
-  designLoadNInput: 12.5,
-  gkInput: 6.5,
-  qkInput: 2.5,
+  designLoadNInput: 12.0,
+  gkInput: 6.1,
+  qkInput: 1.5,
   
   bInput: 1000,
   hInput: 160,
@@ -28,14 +29,8 @@ const DEFAULT_SLAB_INPUTS = {
   fcuInput: 30,
   fyInput: 460,
   
-  barDiaShort: 12,
-  spacingShort: 150,
-  
-  barDiaLong: 10,
-  spacingLong: 200,
-  
-  barDiaSupport: 12,
-  spacingSupport: 150
+  targetPhi: 12,
+  enableShearCheck: false
 };
 
 const BLANK_SLAB_INPUTS = {
@@ -57,20 +52,17 @@ const BLANK_SLAB_INPUTS = {
   fcuInput: '30',
   fyInput: '460',
   
-  barDiaShort: '12',
-  spacingShort: '150',
-  
-  barDiaLong: '10',
-  spacingLong: '200',
-  
-  barDiaSupport: '12',
-  spacingSupport: '150'
+  targetPhi: '12',
+  enableShearCheck: false
 };
 
 export default function App() {
-  // Theme state: DEFAULT IS LIGHT MODE (B/W)
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('bs8110_theme') || 'light';
+  });
+
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(() => {
+    return localStorage.getItem('bs8110_seen_onboarding') === 'true';
   });
 
   const [inputs, setInputs] = useState(() => {
@@ -83,7 +75,6 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // UI Modal & Drawer States
   const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isPresetsOpen, setIsPresetsOpen] = useState(false);
@@ -108,6 +99,11 @@ export default function App() {
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
+
+  const dismissOnboarding = () => {
+    setHasSeenOnboarding(true);
+    localStorage.setItem('bs8110_seen_onboarding', 'true');
   };
 
   const showToast = (msg) => {
@@ -135,6 +131,14 @@ export default function App() {
       }));
       showToast(`Loaded ${preset.name}`);
     }
+  };
+
+  const handleToggleShear = () => {
+    setInputs((prev) => ({
+      ...prev,
+      enableShearCheck: !prev.enableShearCheck
+    }));
+    showToast(inputs.enableShearCheck ? 'Shear check hidden' : 'Shear check enabled');
   };
 
   const handleSaveToHistory = () => {
@@ -211,6 +215,8 @@ export default function App() {
           result={calculationResult}
           onSaveToHistory={handleSaveToHistory}
           onOpenParamsModal={() => setIsParamsModalOpen(true)}
+          onToggleShear={handleToggleShear}
+          enableShearCheck={inputs.enableShearCheck}
         />
 
         {/* 2D Slab Diagram */}
@@ -247,6 +253,12 @@ export default function App() {
         isOpen={isPresetsOpen}
         onClose={() => setIsPresetsOpen(false)}
         onSelectPreset={handleApplyPreset}
+      />
+
+      {/* Onboarding Notice Modal */}
+      <OnboardingModal
+        isOpen={!hasSeenOnboarding}
+        onDismiss={dismissOnboarding}
       />
 
       {/* Toast Notification */}

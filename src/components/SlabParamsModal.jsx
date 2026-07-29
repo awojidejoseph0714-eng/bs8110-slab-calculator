@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Check, Eraser, Layers } from 'lucide-react';
+import EdgeConditionDiagram from './EdgeConditionDiagram';
 
 export default function SlabParamsModal({
   isOpen,
@@ -7,7 +8,6 @@ export default function SlabParamsModal({
   inputs,
   onChange,
   onApplyPreset,
-  onNewBlank,
   onClearInputs
 }) {
   if (!isOpen) return null;
@@ -19,7 +19,7 @@ export default function SlabParamsModal({
   return (
     <>
       <div className="history-overlay" onClick={onClose} />
-      <div className="modal-dialog">
+      <div className="modal-dialog" style={{ maxWidth: '640px' }}>
         <div className="card-title-row">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Layers size={18} />
@@ -30,44 +30,9 @@ export default function SlabParamsModal({
           </button>
         </div>
 
-        {/* Quick Presets Bar */}
+        {/* 1. SLAB TYPE & EDGE CONDITIONS */}
         <div className="form-section">
-          <div className="section-subheading">Standard Slab Presets</div>
-          <div className="input-grid-2">
-            <button
-              className="btn-framer"
-              style={{ fontSize: '0.75rem', justifyContent: 'center' }}
-              onClick={() => onApplyPreset('one_way_solid')}
-            >
-              1-Way Solid Slab
-            </button>
-            <button
-              className="btn-framer"
-              style={{ fontSize: '0.75rem', justifyContent: 'center' }}
-              onClick={() => onApplyPreset('two_way_restrained_interior')}
-            >
-              2-Way Restrained (Interior)
-            </button>
-            <button
-              className="btn-framer"
-              style={{ fontSize: '0.75rem', justifyContent: 'center' }}
-              onClick={() => onApplyPreset('two_way_ss')}
-            >
-              2-Way Simply Supported
-            </button>
-            <button
-              className="btn-framer"
-              style={{ fontSize: '0.75rem', justifyContent: 'center' }}
-              onClick={() => onApplyPreset('cantilever_balcony')}
-            >
-              Cantilever Balcony
-            </button>
-          </div>
-        </div>
-
-        {/* 1. SLAB TYPE & PANEL CONDITIONS */}
-        <div className="form-section">
-          <div className="section-subheading">1. Slab Type & Edge Conditions</div>
+          <div className="section-subheading">1. Slab Type & Edge Condition</div>
 
           <div className="input-field-group">
             <label className="input-label">Slab Type</label>
@@ -84,37 +49,11 @@ export default function SlabParamsModal({
           </div>
 
           {inputs.slabType === 'two_way_restrained' && (
-            <div className="input-field-group">
-              <label className="input-label">Panel Edge Condition (BS 8110 Table 3.14)</label>
-              <select
-                className="framer-select"
-                value={inputs.panelCondition}
-                onChange={(e) => handleInputChange('panelCondition', e.target.value)}
-              >
-                <option value="one_long_discontinuous">One Long Edge Discontinuous</option>
-                <option value="interior">Interior Panel (Continuous on all 4 edges)</option>
-                <option value="one_short_discontinuous">One Short Edge Discontinuous</option>
-                <option value="two_adjacent_discontinuous">Two Adjacent Edges Discontinuous (Corner Panel)</option>
-                <option value="two_short_discontinuous">Two Short Edges Discontinuous</option>
-                <option value="two_long_discontinuous">Two Long Edges Discontinuous</option>
-                <option value="three_edges_discontinuous_long_cont">Three Edges Discontinuous (Long Edge Continuous)</option>
-                <option value="three_edges_discontinuous_short_cont">Three Edges Discontinuous (Short Edge Continuous)</option>
-              </select>
-            </div>
+            <EdgeConditionDiagram
+              selected={inputs.panelCondition}
+              onSelect={(id) => handleInputChange('panelCondition', id)}
+            />
           )}
-
-          {/* Table 3.14 Lookup Mode Selector */}
-          <div className="input-field-group">
-            <label className="input-label">Table 3.14/3.15 Coefficient Mode</label>
-            <select
-              className="framer-select"
-              value={inputs.lookupMode || 'linear'}
-              onChange={(e) => handleInputChange('lookupMode', e.target.value)}
-            >
-              <option value="linear">Linear Interpolation (BS 8110 Standard / manual-design.vercel.app)</option>
-              <option value="upward">Upward Ratio Lookup (Nearest Ceiling Ratio)</option>
-            </select>
-          </div>
         </div>
 
         {/* 2. GEOMETRY & LOADING */}
@@ -138,21 +77,23 @@ export default function SlabParamsModal({
               />
             </div>
 
-            <div className="input-field-group">
-              <label className="input-label">
-                <span>Long Span (ly)</span>
-                <span className="input-unit">m</span>
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0.5"
-                placeholder="e.g. 5.0"
-                className="framer-input"
-                value={inputs.lyInput}
-                onChange={(e) => handleInputChange('lyInput', e.target.value)}
-              />
-            </div>
+            {inputs.slabType !== 'one_way' && inputs.slabType !== 'cantilever' && (
+              <div className="input-field-group">
+                <label className="input-label">
+                  <span>Long Span (ly)</span>
+                  <span className="input-unit">m</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.5"
+                  placeholder="e.g. 5.0"
+                  className="framer-input"
+                  value={inputs.lyInput}
+                  onChange={(e) => handleInputChange('lyInput', e.target.value)}
+                />
+              </div>
+            )}
           </div>
 
           <div className="input-grid-2">
@@ -165,7 +106,7 @@ export default function SlabParamsModal({
                 type="number"
                 step="5"
                 min="50"
-                placeholder="e.g. 150"
+                placeholder="e.g. 160"
                 className="framer-input"
                 value={inputs.hInput}
                 onChange={(e) => handleInputChange('hInput', e.target.value)}
@@ -249,9 +190,9 @@ export default function SlabParamsModal({
           </div>
         </div>
 
-        {/* 3. MATERIALS */}
+        {/* 3. MATERIALS & REBAR */}
         <div className="form-section">
-          <div className="section-subheading">3. Material Strengths</div>
+          <div className="section-subheading">3. Materials & Target Bar Size</div>
           <div className="input-grid-2">
             <div className="input-field-group">
               <label className="input-label">Concrete (fcu 15-40)</label>
@@ -280,40 +221,19 @@ export default function SlabParamsModal({
               </select>
             </div>
           </div>
-        </div>
 
-        {/* 4. REINFORCEMENT BAR DIAMETERS */}
-        <div className="form-section">
-          <div className="section-subheading">4. Bar Diameter Selection (Spacing Solved Automatically)</div>
-
-          <div className="input-grid-2">
-            <div className="input-field-group">
-              <label className="input-label">Short Span Bar (Φ)</label>
-              <select
-                className="framer-select"
-                value={inputs.barDiaShort}
-                onChange={(e) => handleInputChange('barDiaShort', e.target.value)}
-              >
-                <option value="10">Y10</option>
-                <option value="12">Y12</option>
-                <option value="16">Y16</option>
-              </select>
-            </div>
-
-            {inputs.slabType !== 'one_way' && inputs.slabType !== 'cantilever' && (
-              <div className="input-field-group">
-                <label className="input-label">Long Span Bar (Φ)</label>
-                <select
-                  className="framer-select"
-                  value={inputs.barDiaLong}
-                  onChange={(e) => handleInputChange('barDiaLong', e.target.value)}
-                >
-                  <option value="10">Y10</option>
-                  <option value="12">Y12</option>
-                  <option value="16">Y16</option>
-                </select>
-              </div>
-            )}
+          <div className="input-field-group">
+            <label className="input-label">Target Bar Diameter (Φ)</label>
+            <select
+              className="framer-select"
+              value={inputs.targetPhi || 12}
+              onChange={(e) => handleInputChange('targetPhi', e.target.value)}
+            >
+              <option value="10">Y10 (10mm)</option>
+              <option value="12">Y12 (12mm)</option>
+              <option value="16">Y16 (16mm)</option>
+              <option value="20">Y20 (20mm)</option>
+            </select>
           </div>
         </div>
 
