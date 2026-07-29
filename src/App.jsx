@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Component } from 'react';
 import Header from './components/Header';
 import SlabParamsModal from './components/SlabParamsModal';
 import ResultsSummary from './components/ResultsSummary';
@@ -8,7 +8,7 @@ import HistoryDrawer from './components/HistoryDrawer';
 import PresetTemplatesModal from './components/PresetTemplatesModal';
 import OnboardingModal from './components/OnboardingModal';
 import { calculateBS8110Slab, SLAB_PRESETS } from './utils/bs8110Engine';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, RefreshCw, AlertTriangle } from 'lucide-react';
 
 const DEFAULT_SLAB_INPUTS = {
   slabType: 'two_way_restrained',
@@ -56,7 +56,51 @@ const BLANK_SLAB_INPUTS = {
   enableShearCheck: false
 };
 
-export default function App() {
+// React Error Boundary to prevent any blank white screen
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  handleReset = () => {
+    localStorage.removeItem('bs8110_slab_inputs');
+    this.setState({ hasError: false, error: null });
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '40px 20px', textAlign: 'center', fontFamily: 'sans-serif', maxWidth: '500px', margin: '40px auto', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+          <AlertTriangle size={40} color="#ef4444" style={{ marginBottom: '12px' }} />
+          <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>Application Session Reset Required</h2>
+          <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '20px' }}>
+            A stored session parameter from a previous version caused a display error. Tapping reset will restore default parameters cleanly.
+          </p>
+          <button
+            onClick={this.handleReset}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', background: '#000', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            <RefreshCw size={16} /> Reset Parameters & Refresh
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function MainCalculatorApp() {
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('bs8110_theme') || 'light';
   });
@@ -66,13 +110,21 @@ export default function App() {
   });
 
   const [inputs, setInputs] = useState(() => {
-    const saved = localStorage.getItem('bs8110_slab_inputs');
-    return saved ? JSON.parse(saved) : DEFAULT_SLAB_INPUTS;
+    try {
+      const saved = localStorage.getItem('bs8110_slab_inputs');
+      return saved ? { ...DEFAULT_SLAB_INPUTS, ...JSON.parse(saved) } : DEFAULT_SLAB_INPUTS;
+    } catch (e) {
+      return DEFAULT_SLAB_INPUTS;
+    }
   });
 
   const [history, setHistory] = useState(() => {
-    const saved = localStorage.getItem('bs8110_slab_history');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('bs8110_slab_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
   });
 
   const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
@@ -94,7 +146,12 @@ export default function App() {
   }, [history]);
 
   const calculationResult = useMemo(() => {
-    return calculateBS8110Slab(inputs);
+    try {
+      return calculateBS8110Slab(inputs);
+    } catch (err) {
+      console.error("Calculation Error:", err);
+      return calculateBS8110Slab(DEFAULT_SLAB_INPUTS);
+    }
   }, [inputs]);
 
   const toggleTheme = () => {
@@ -269,5 +326,13 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <MainCalculatorApp />
+    </ErrorBoundary>
   );
 }

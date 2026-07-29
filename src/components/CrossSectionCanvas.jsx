@@ -17,7 +17,7 @@ export default function CrossSectionCanvas({ result }) {
     );
   }
 
-  const { inputs, moments, flexureParts } = result;
+  const { inputs } = result;
 
   const canvasW = 340;
   const canvasH = 220;
@@ -34,6 +34,9 @@ export default function CrossSectionCanvas({ result }) {
   const secW = 80;
   const secH = 140;
 
+  const safeLx = Number(inputs?.lx) || 4.0;
+  const safeLy = Number(inputs?.ly) || safeLx;
+
   return (
     <div className="canvas-wrapper">
       <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>
@@ -45,7 +48,6 @@ export default function CrossSectionCanvas({ result }) {
 
         {/* 1. PLAN VIEW OF SLAB PANEL */}
         <g>
-          {/* Slab Boundary */}
           <rect
             x={planX}
             y={planY}
@@ -57,13 +59,13 @@ export default function CrossSectionCanvas({ result }) {
             rx="4"
           />
 
-          {/* Short Span Reinforcement (Horizontal bars) */}
+          {/* Short Span Reinforcement */}
           <line x1={planX + 15} y1={planY + 40} x2={planX + planW - 15} y2={planY + 40} stroke="#10b981" strokeWidth="2" />
           <line x1={planX + 15} y1={planY + 70} x2={planX + planW - 15} y2={planY + 70} stroke="#10b981" strokeWidth="2" />
           <line x1={planX + 15} y1={planY + 100} x2={planX + planW - 15} y2={planY + 100} stroke="#10b981" strokeWidth="2" />
 
-          {/* Long Span Reinforcement (Vertical bars) */}
-          {inputs.slabType !== 'one_way' && inputs.slabType !== 'cantilever' && (
+          {/* Long Span Reinforcement */}
+          {inputs?.slabType !== 'one_way' && inputs?.slabType !== 'cantilever' && (
             <>
               <line x1={planX + 50} y1={planY + 15} x2={planX + 50} y2={planY + planH - 15} stroke="#6366f1" strokeWidth="1.5" strokeDasharray="4 2" />
               <line x1={planX + 100} y1={planY + 15} x2={planX + 100} y2={planY + planH - 15} stroke="#6366f1" strokeWidth="1.5" strokeDasharray="4 2" />
@@ -73,14 +75,14 @@ export default function CrossSectionCanvas({ result }) {
 
           {/* Labels */}
           <text x={planX + planW / 2} y={planY - 8} fill="var(--text-muted)" fontSize="11" fontFamily="var(--font-mono)" textAnchor="middle">
-            lx = {inputs.lx} m
+            lx = {safeLx} m
           </text>
           <text x={planX - 8} y={planY + planH / 2} fill="var(--text-muted)" fontSize="11" fontFamily="var(--font-mono)" textAnchor="middle" transform={`rotate(-90 ${planX - 8} ${planY + planH / 2})`}>
-            ly = {inputs.ly.toFixed(1)} m
+            ly = {safeLy.toFixed(1)} m
           </text>
 
-          <text x={planX + planW / 2} y={planY + planH / 2} fill="var(--accent-blue)" fontSize="11" fontWeight="700" textAnchor="middle">
-            {inputs.slabType.toUpperCase().replace(/_/g, ' ')}
+          <text x={planX + planW / 2} y={planY + planH / 2} fill="var(--text-main)" fontSize="11" fontWeight="700" textAnchor="middle">
+            {(inputs?.slabType || 'slab').toUpperCase().replace(/_/g, ' ')}
           </text>
         </g>
 
@@ -97,21 +99,13 @@ export default function CrossSectionCanvas({ result }) {
             rx="3"
           />
 
-          {/* Main Rebar dots */}
-          <circle cx={secX + 20} cy={secY + secH - 20} r="4" fill="#10b981" />
-          <circle cx={secX + 40} cy={secY + secH - 20} r="4" fill="#10b981" />
-          <circle cx={secX + 60} cy={secY + secH - 20} r="4" fill="#10b981" />
+          <line x1={secX + 10} y1={secY + secH - 15} x2={secX + secW - 10} y2={secY + secH - 15} stroke="#10b981" strokeWidth="3" />
+          <circle cx={secX + 25} cy={secY + secH - 22} r="3" fill="#6366f1" />
+          <circle cx={secX + 40} cy={secY + secH - 22} r="3" fill="#6366f1" />
+          <circle cx={secX + 55} cy={secY + secH - 22} r="3" fill="#6366f1" />
 
-          {/* Top Hogging Rebar (if applicable) */}
-          {moments.Mhx > 0 && (
-            <>
-              <circle cx={secX + 20} cy={secY + 20} r="4" fill="#6366f1" />
-              <circle cx={secX + 60} cy={secY + 20} r="4" fill="#6366f1" />
-            </>
-          )}
-
-          <text x={secX + secW / 2} y={secY + secH + 16} fill="var(--text-muted)" fontSize="10" fontFamily="var(--font-mono)" textAnchor="middle">
-            h = {inputs.h} mm
+          <text x={secX + secW / 2} y={secY + secH / 2} fill="var(--text-main)" fontSize="10" fontWeight="600" textAnchor="middle">
+            h = {inputs?.h || 150}mm
           </text>
         </g>
       </svg>
