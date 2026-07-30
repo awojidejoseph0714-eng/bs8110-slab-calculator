@@ -9,7 +9,6 @@ export const AppCalculationConstants = {
   leverArmCap: 0.95,
   minSteelFactorFy460: 0.0013, // 0.13% bd (using effective depth d)
   minSteelFactorFy250: 0.0024, // 0.24% bd (using effective depth d)
-  assumedServiceLoadFactor: 1.5,
   bufferMargin_mm2: 100,
   validationBounds: {
     span_mm: { min: 500, max: 50000 },
@@ -615,7 +614,7 @@ export function calculateBS8110Slab(inputs) {
 
   const M_max = Math.max(Msx, Mhx, Msy, Mhy);
 
-  // FLEXURE DESIGN
+  // FLEXURE DESIGN PER DIRECTION
   const flexureShortMidspan = solveFlexureSection({
     locationName: 'Short Span Midspan (+ve Msx)',
     directionName: 'ShortSpan',
@@ -684,7 +683,10 @@ export function calculateBS8110Slab(inputs) {
     };
   }
 
-  // DEFLECTION CONTROL
+  // -------------------------------------------------------------
+  // STEP 4: SERVICEABILITY DEFLECTION CONTROL (SHORT & LONG SPAN CHECKS)
+  // Direct use of ultimate midspan bending moments Msx & Msy (No service load factor n/1.5)
+  // -------------------------------------------------------------
   let basicSpanToDepth = 26;
   if (isTwoWaySS || isOneWay) {
     basicSpanToDepth = 20;
@@ -692,42 +694,81 @@ export function calculateBS8110Slab(inputs) {
     basicSpanToDepth = 7;
   }
 
-  const ns = n / AppCalculationConstants.assumedServiceLoadFactor;
-  const Msx_service = (momentCoeffs.bsx || 0.125) * ns * Math.pow(lx, 2);
+  // 4.1 Short Span Deflection Check (lx, dx, ultimate Msx)
+  const fs_x = (2 / 3) * fy * (flexureShortMidspan.As_req / flexureShortMidspan.As_prov);
+  const M_bd2_x = (Msx * 1e6) / (b * Math.pow(dx, 2));
+  const F1_raw_x = 0.55 + (477 - fs_x) / (120 * (0.9 + M_bd2_x));
+  const F1_x = Math.min(2.0, Math.max(0.55, F1_raw_x));
+  const allowableSpanToDepth_x = basicSpanToDepth * F1_x;
+  const actualSpanToDepth_x = (lx * 1000) / dx;
+  const pass_x = actualSpanToDepth_x <= allowableSpanToDepth_x;
 
-  const fs = (2 / 3) * fy * (flexureShortMidspan.As_req / flexureShortMidspan.As_prov);
-  const M_bd2_service = (Msx_service * 1e6) / (b * Math.pow(dx, 2));
+  const shortSpanDeflection = {
+    spanName: 'Short Span (lx)',
+    spanLength: lx,
+    d: dx,
+    M_midspan: Msx,
+    fs: fs_x,
+    M_bd2: M_bd2_x,
+    F1: F1_x,
+    allowableSpanToDepth: allowableSpanToDepth_x,
+    actualSpanToDepth: actualSpanToDepth_x,
+    pass: pass_x,
+    workingLines: [
+      `Base span/d ratio = ${basicSpanToDepth} (${isTwoWayRestrained ? 'Two-Way Restrained' : isTwoWaySS ? 'Two-Way Simply Supported' : isOneWay ? 'One-Way Solid' : 'Cantilever'})`,
+      `Short Span Length lx = ${lx}m, dx = ${dx.toFixed(0)}mm`,
+      `Ultimate Midspan Moment Msx = ${Msx.toFixed(2)} kNm/m`,
+      `Service Stress fs,x = (2/3) × ${fy} × (${flexureShortMidspan.As_req.toFixed(2)} / ${flexureShortMidspan.As_prov.toFixed(1)}) = ${fs_x.toFixed(1)} N/mm²`,
+      `M / (b.d²) = (${Msx.toFixed(2)}×10⁶) / (1000×${dx.toFixed(0)}²) = ${M_bd2_x.toFixed(3)} N/mm² (using ultimate Msx)`,
+      `Modification Factor F1,x = 0.55 + (477 - ${fs_x.toFixed(1)}) / [120 × (0.9 + ${M_bd2_x.toFixed(3)})] = ${F1_raw_x.toFixed(2)} (capped max 2.0 → ${F1_x.toFixed(2)})`,
+      `Allowable span/d = ${basicSpanToDepth} × ${F1_x.toFixed(2)} = ${allowableSpanToDepth_x.toFixed(2)}`,
+      `Actual span/d = (${lx}×1000) / ${dx.toFixed(0)} = ${actualSpanToDepth_x.toFixed(2)}`,
+      `Short Span Deflection: Actual (${actualSpanToDepth_x.toFixed(1)}) ≤ Allowable (${allowableSpanToDepth_x.toFixed(1)}) → ${pass_x ? 'PASS (Adequate)' : 'FAIL'}`
+    ]
+  };
 
-  const F1_raw = 0.55 + (477 - fs) / (120 * (0.9 + M_bd2_service));
-  const F1 = Math.min(2.0, Math.max(0.55, F1_raw));
-  const F2 = 1.0;
+  // 4.2 Long Span Deflection Check (ly, dy, ultimate Msy)
+  let longSpanDeflection = null;
+  if (!isOneWay && !isCantilever && Msy > 0 && flexureLongMidspan) {
+    const fs_y = (2 / 3) * fy * (flexureLongMidspan.As_req / flexureLongMidspan.As_prov);
+    const M_bd2_y = (Msy * 1e6) / (b * Math.pow(dy, 2));
+    const F1_raw_y = 0.55 + (477 - fs_y) / (120 * (0.9 + M_bd2_y));
+    const F1_y = Math.min(2.0, Math.max(0.55, F1_raw_y));
+    const allowableSpanToDepth_y = basicSpanToDepth * F1_y;
+    const actualSpanToDepth_y = (ly * 1000) / dy;
+    const pass_y = actualSpanToDepth_y <= allowableSpanToDepth_y;
 
-  const allowableSpanToDepth = basicSpanToDepth * F1 * F2;
-  const actualSpanToDepth = (lx * 1000) / dx;
-  const deflectionPass = actualSpanToDepth <= allowableSpanToDepth;
+    longSpanDeflection = {
+      spanName: 'Long Span (ly)',
+      spanLength: ly,
+      d: dy,
+      M_midspan: Msy,
+      fs: fs_y,
+      M_bd2: M_bd2_y,
+      F1: F1_y,
+      allowableSpanToDepth: allowableSpanToDepth_y,
+      actualSpanToDepth: actualSpanToDepth_y,
+      pass: pass_y,
+      workingLines: [
+        `Long Span Length ly = ${ly.toFixed(2)}m, dy = ${dy.toFixed(0)}mm`,
+        `Ultimate Midspan Moment Msy = ${Msy.toFixed(2)} kNm/m`,
+        `Service Stress fs,y = (2/3) × ${fy} × (${flexureLongMidspan.As_req.toFixed(2)} / ${flexureLongMidspan.As_prov.toFixed(1)}) = ${fs_y.toFixed(1)} N/mm²`,
+        `M / (b.d²) = (${Msy.toFixed(2)}×10⁶) / (1000×${dy.toFixed(0)}²) = ${M_bd2_y.toFixed(3)} N/mm² (using ultimate Msy)`,
+        `Modification Factor F1,y = 0.55 + (477 - ${fs_y.toFixed(1)}) / [120 × (0.9 + ${M_bd2_y.toFixed(3)})] = ${F1_raw_y.toFixed(2)} (capped max 2.0 → ${F1_y.toFixed(2)})`,
+        `Allowable span/d = ${basicSpanToDepth} × ${F1_y.toFixed(2)} = ${allowableSpanToDepth_y.toFixed(2)}`,
+        `Actual span/d = (${ly.toFixed(2)}×1000) / ${dy.toFixed(0)} = ${actualSpanToDepth_y.toFixed(2)}`,
+        `Long Span Deflection: Actual (${actualSpanToDepth_y.toFixed(1)}) ≤ Allowable (${allowableSpanToDepth_y.toFixed(1)}) → ${pass_y ? 'PASS (Adequate)' : 'FAIL'}`
+      ]
+    };
+  }
+
+  const deflectionPass = shortSpanDeflection.pass && (longSpanDeflection ? longSpanDeflection.pass : true);
 
   const deflection = {
     basicSpanToDepth,
-    ns,
-    Msx_service,
-    fs,
-    M_bd2_service,
-    F1,
-    F2,
-    allowableSpanToDepth,
-    actualSpanToDepth,
-    pass: deflectionPass,
-    workingLines: [
-      `Base span/d ratio = ${basicSpanToDepth} (${isTwoWayRestrained ? 'Two-Way Restrained' : isTwoWaySS ? 'Two-Way Simply Supported' : isOneWay ? 'One-Way Solid' : 'Cantilever'})`,
-      `Assumed Service Load ns = n / 1.5 = ${n.toFixed(2)} / 1.5 = ${ns.toFixed(2)} kN/m²`,
-      `Service Moment Msx,service = βsx × ns × lx² = ${Msx_service.toFixed(2)} kNm/m`,
-      `Service Tension Stress fs = (2/3) × ${fy} × (${flexureShortMidspan.As_req.toFixed(2)} / ${flexureShortMidspan.As_prov.toFixed(1)}) = ${fs.toFixed(1)} N/mm²`,
-      `M_service / (b.d²) = (${Msx_service.toFixed(2)}×10⁶) / (1000×${dx.toFixed(0)}²) = ${M_bd2_service.toFixed(3)} N/mm²`,
-      `Modification Factor F1 = 0.55 + (477 - ${fs.toFixed(1)}) / [120 × (0.9 + ${M_bd2_service.toFixed(3)})] = ${F1_raw.toFixed(2)} (capped max 2.0 → ${F1.toFixed(2)})`,
-      `Allowable span/d = ${basicSpanToDepth} × ${F1.toFixed(2)} = ${allowableSpanToDepth.toFixed(2)}`,
-      `Actual span/d = (${lx}×1000) / ${dx.toFixed(0)} = ${actualSpanToDepth.toFixed(2)}`,
-      `Deflection Check: Actual (${actualSpanToDepth.toFixed(1)}) ≤ Allowable (${allowableSpanToDepth.toFixed(1)}) → ${deflectionPass ? 'PASS (Deflection Adequate)' : 'FAIL'}`
-    ]
+    shortSpan: shortSpanDeflection,
+    longSpan: longSpanDeflection,
+    pass: deflectionPass
   };
 
   const overallPass = flexurePass && !hasOverReinforced && (shearCheck ? shearCheck.pass : true) && deflectionPass;
@@ -736,7 +777,6 @@ export function calculateBS8110Slab(inputs) {
     isBlank: false,
     inputs: { ...inputs, b, lx, ly, lyOverLxRaw, h, cover, dx, dy, fcu, fy, n, targetPhiX: phiX, targetPhiY: phiY, effectiveRatio: momentCoeffs.effectiveRatio, caseNumber: caseNumber || 3 },
     n,
-    ns,
     M_max,
     hasOverReinforced,
     moments: { Msx, Mhx, Msy, Mhy, momentCoeffs },

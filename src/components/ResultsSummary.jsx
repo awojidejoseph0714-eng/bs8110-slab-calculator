@@ -37,6 +37,9 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
     inputs?.slabType === 'TwoWayRestrained' || inputs?.slabType === 'two_way_restrained' ? flexureParts?.longSupport : null
   ].filter(Boolean);
 
+  const shortDef = deflection?.shortSpan;
+  const longDef = deflection?.longSpan;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* 1. TOP VERDICT BANNER */}
@@ -172,7 +175,7 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
         </div>
       </div>
 
-      {/* 3. FLEXURAL REINFORCEMENT SUMMARY (EXACT DECIMALS FOR As,calc & As,min & As,req) */}
+      {/* 3. FLEXURAL REINFORCEMENT SUMMARY */}
       <div className="framer-card">
         <div className="card-title-row">
           <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>2. Flexural Steel Area & BS 8110 Table Spacing</h3>
@@ -236,22 +239,69 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
         </div>
       </div>
 
-      {/* 4. DEFLECTION CONTROL */}
+      {/* 4. DEFLECTION CONTROL (SHORT & LONG SPAN MIDSPAN CHECKS) */}
       <div className="framer-card">
         <div className="card-title-row">
-          <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>3. Deflection Control Verdict</h3>
+          <div>
+            <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>3. Serviceability Deflection Control</h3>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+              Evaluated directly at midspans using ultimate moments (no service load reduction factor)
+            </div>
+          </div>
+
           <span className={`check-pill ${deflection?.pass ? 'pass' : 'fail'}`}>
             {deflection?.pass ? 'PASS' : 'FAIL'}
           </span>
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', background: 'var(--bg-card-alt)', padding: '12px', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '0.825rem' }}>
-          <div>Base Ratio: <strong>{deflection?.basicSpanToDepth}</strong></div>
-          <div>Service Load ns: <strong>{deflection?.ns?.toFixed(2)} kN/m²</strong></div>
-          <div>Service Stress fs: <strong>{deflection?.fs.toFixed(1)} N/mm²</strong></div>
-          <div>Factor F1: <strong>{deflection?.F1.toFixed(2)}</strong></div>
-          <div>Allowable Span/d: <strong>{deflection?.allowableSpanToDepth.toFixed(1)}</strong></div>
-          <div>Actual Span/d: <strong>{deflection?.actualSpanToDepth.toFixed(1)}</strong></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Short Span Deflection Card */}
+          {shortDef && (
+            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px', background: 'var(--bg-card-alt)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                  Short Span (lx = {shortDef.spanLength}m, dx = {shortDef.d.toFixed(0)}mm)
+                </div>
+                <span className={`check-pill ${shortDef.pass ? 'pass' : 'fail'}`}>
+                  {shortDef.pass ? 'PASS' : 'FAIL'}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                <div>Base Ratio: <strong>{deflection.basicSpanToDepth}</strong></div>
+                <div>Ultimate Msx: <strong>{shortDef.M_midspan.toFixed(2)} kNm/m</strong></div>
+                <div>Stress fs: <strong>{shortDef.fs.toFixed(1)} N/mm²</strong></div>
+                <div>M / (b.d²): <strong>{shortDef.M_bd2.toFixed(3)} N/mm²</strong></div>
+                <div>Factor F1: <strong>{shortDef.F1.toFixed(2)}</strong></div>
+                <div>Allowable Span/d: <strong>{shortDef.allowableSpanToDepth.toFixed(1)}</strong></div>
+                <div>Actual Span/d: <strong>{shortDef.actualSpanToDepth.toFixed(1)}</strong></div>
+              </div>
+            </div>
+          )}
+
+          {/* Long Span Deflection Card */}
+          {longDef && (
+            <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '12px', background: 'var(--bg-card-alt)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                  Long Span (ly = {longDef.spanLength.toFixed(1)}m, dy = {longDef.d.toFixed(0)}mm)
+                </div>
+                <span className={`check-pill ${longDef.pass ? 'pass' : 'fail'}`}>
+                  {longDef.pass ? 'PASS' : 'FAIL'}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                <div>Base Ratio: <strong>{deflection.basicSpanToDepth}</strong></div>
+                <div>Ultimate Msy: <strong>{longDef.M_midspan.toFixed(2)} kNm/m</strong></div>
+                <div>Stress fs: <strong>{longDef.fs.toFixed(1)} N/mm²</strong></div>
+                <div>M / (b.d²): <strong>{longDef.M_bd2.toFixed(3)} N/mm²</strong></div>
+                <div>Factor F1: <strong>{longDef.F1.toFixed(2)}</strong></div>
+                <div>Allowable Span/d: <strong>{longDef.allowableSpanToDepth.toFixed(1)}</strong></div>
+                <div>Actual Span/d: <strong>{longDef.actualSpanToDepth.toFixed(1)}</strong></div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

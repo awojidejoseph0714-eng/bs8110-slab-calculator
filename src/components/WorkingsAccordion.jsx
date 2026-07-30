@@ -22,6 +22,9 @@ export default function WorkingsAccordion({ result }) {
   const safeRatio = Number(inputs?.lyOverLxRaw) || 1.0;
   const effectiveRatio = inputs?.effectiveRatio || 1.0;
 
+  const shortDef = deflection?.shortSpan;
+  const longDef = deflection?.longSpan;
+
   return (
     <div className="framer-card">
       <div className="card-title-row">
@@ -199,7 +202,7 @@ export default function WorkingsAccordion({ result }) {
             <div className="accordion-title-left">
               <span className="step-number-badge">4</span>
               <div>
-                <span>Serviceability Deflection Check</span>
+                <span>Serviceability Deflection Check (Short & Long Spans)</span>
                 <span className="clause-badge">Cl 3.4.6.5</span>
               </div>
             </div>
@@ -208,14 +211,29 @@ export default function WorkingsAccordion({ result }) {
 
           {openSections.deflection && deflection && (
             <div className="accordion-content">
-              <div className="math-step-block">
-                <div className="math-step-title">4.1 Span/Depth Modification Factor (F1) & Allowable Ratio</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--bg-card-alt)', padding: '10px 12px', borderRadius: '4px' }}>
-                  {(deflection.workingLines || []).map((line, idx) => (
-                    <div key={idx}>{line}</div>
-                  ))}
+              {/* 4.1 Short Span Deflection */}
+              {shortDef && (
+                <div className="math-step-block">
+                  <div className="math-step-title">4.1 Short Span Deflection Check (lx = {shortDef.spanLength}m, Msx = {shortDef.M_midspan.toFixed(2)} kNm/m)</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--bg-card-alt)', padding: '10px 12px', borderRadius: '4px' }}>
+                    {(shortDef.workingLines || []).map((line, idx) => (
+                      <div key={idx}>{line}</div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* 4.2 Long Span Deflection */}
+              {longDef && (
+                <div className="math-step-block">
+                  <div className="math-step-title">4.2 Long Span Deflection Check (ly = {longDef.spanLength.toFixed(2)}m, Msy = {longDef.M_midspan.toFixed(2)} kNm/m)</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--bg-card-alt)', padding: '10px 12px', borderRadius: '4px' }}>
+                    {(longDef.workingLines || []).map((line, idx) => (
+                      <div key={idx}>{line}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
