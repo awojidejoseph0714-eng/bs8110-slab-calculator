@@ -250,6 +250,27 @@ function getUpwardLookupRatio(ratioRaw) {
   return 2.0;
 }
 
+const TABLE_3_13 = {
+  1.0:  { bsx: 0.062, bsy: 0.062 },
+  1.1:  { bsx: 0.074, bsy: 0.061 },
+  1.2:  { bsx: 0.084, bsy: 0.059 },
+  1.3:  { bsx: 0.093, bsy: 0.055 },
+  1.4:  { bsx: 0.100, bsy: 0.051 },
+  1.5:  { bsx: 0.106, bsy: 0.046 },
+  1.75: { bsx: 0.118, bsy: 0.037 },
+  2.0:  { bsx: 0.124, bsy: 0.028 }
+};
+
+function getTable313Coeffs(lyOverLxRaw) {
+  const ratio = Math.max(1.0, Number(lyOverLxRaw) || 1.0);
+  if (ratio > 2.0) {
+    return { bhx: 0, bsx: 0.125, bhy: 0, bsy: 0, effectiveRatio: '> 2.0 (One-Way)' };
+  }
+  const upwardRatio = getUpwardLookupRatio(ratio);
+  const coeffs = TABLE_3_13[upwardRatio] || TABLE_3_13[2.0];
+  return { bhx: 0, bsx: coeffs.bsx, bhy: 0, bsy: coeffs.bsy, effectiveRatio: upwardRatio };
+}
+
 function getTable314Coeffs(panelType, lyOverLxRaw) {
   const panelData = TABLE_3_14[panelType] || TABLE_3_14.interior;
   const ratio = Math.min(2.0, Math.max(1.0, Number(lyOverLxRaw) || 1.0));
@@ -501,6 +522,7 @@ export function calculateBS8110Slab(inputs) {
 
   const {
     slabType = 'TwoWayRestrained',
+    oneWayCondition = 'simply_supported',
     caseNumber = 3,
     panelCondition = 'one_long_discontinuous',
     
@@ -593,13 +615,26 @@ export function calculateBS8110Slab(inputs) {
   const isTwoWayRestrained = slabType === 'TwoWayRestrained' || slabType === 'two_way_restrained';
 
   if (isOneWay) {
-    momentCoeffs.bsx = 0.125;
-    Msx = 0.125 * n * Math.pow(lx, 2);
+    if (oneWayCondition === 'continuous_end_span') {
+      momentCoeffs = { bhx: 0.086, bsx: 0.086, bhy: 0, bsy: 0, effectiveRatio: 1.0 };
+      Msx = 0.086 * n * Math.pow(lx, 2);
+      Mhx = 0.086 * n * Math.pow(lx, 2);
+    } else if (oneWayCondition === 'continuous_interior_span') {
+      momentCoeffs = { bhx: 0.063, bsx: 0.063, bhy: 0, bsy: 0, effectiveRatio: 1.0 };
+      Msx = 0.063 * n * Math.pow(lx, 2);
+      Mhx = 0.063 * n * Math.pow(lx, 2);
+    } else {
+      // simply_supported
+      momentCoeffs = { bhx: 0, bsx: 0.125, bhy: 0, bsy: 0, effectiveRatio: 1.0 };
+      Msx = 0.125 * n * Math.pow(lx, 2);
+      Mhx = 0;
+    }
   } else if (isCantilever) {
-    momentCoeffs.bhx = 0.500;
+    momentCoeffs = { bhx: 0.500, bsx: 0, bhy: 0, bsy: 0, effectiveRatio: 1.0 };
     Mhx = 0.500 * n * Math.pow(lx, 2);
+    Msx = 0;
   } else if (isTwoWaySS) {
-    momentCoeffs = getTable314Coeffs('four_edges_discontinuous', lyOverLxRaw);
+    momentCoeffs = getTable313Coeffs(lyOverLxRaw);
     shearCoeffs = getTable315Coeffs('four_edges_discontinuous', lyOverLxRaw);
     Msx = momentCoeffs.bsx * n * Math.pow(lx, 2);
     Msy = momentCoeffs.bsy * n * Math.pow(lx, 2);
@@ -616,19 +651,19 @@ export function calculateBS8110Slab(inputs) {
 
   // FLEXURE DESIGN PER DIRECTION
   const flexureShortMidspan = solveFlexureSection({
-    locationName: 'Short Span Midspan (+ve Msx)',
+    locationName: isCantilever ? 'Main Span (Tension at Support)' : 'Short Span Midspan (+ve Msx)',
     directionName: 'ShortSpan',
     M: Msx, b, d: dx, h, fcu, fy, initialBarDia: phiX
   });
 
   const flexureShortSupport = solveFlexureSection({
-    locationName: 'Short Span Support (-ve Mhx)',
+    locationName: isCantilever ? 'Cantilever Support (-ve Mhx)' : 'Short Span Support (-ve Mhx)',
     directionName: 'ShortSpan',
     M: Mhx, b, d: dx, h, fcu, fy, initialBarDia: phiX
   });
 
   const flexureLongMidspan = solveFlexureSection({
-    locationName: 'Long Span Midspan (+ve Msy)',
+    locationName: isOneWay || isCantilever ? 'Transverse Distribution Steel (As,min)' : 'Long Span Midspan (+ve Msy)',
     directionName: 'LongSpan',
     M: Msy, b, d: dy, h, fcu, fy, initialBarDia: phiY
   });
@@ -685,18 +720,24 @@ export function calculateBS8110Slab(inputs) {
 
   // -------------------------------------------------------------
   // STEP 4: SERVICEABILITY DEFLECTION CONTROL (SHORT & LONG SPAN CHECKS)
-  // Direct use of ultimate midspan bending moments Msx & Msy (No service load factor n/1.5)
   // -------------------------------------------------------------
   let basicSpanToDepth = 26;
-  if (isTwoWaySS || isOneWay) {
-    basicSpanToDepth = 20;
-  } else if (isCantilever) {
+  if (isCantilever) {
     basicSpanToDepth = 7;
+  } else if (isTwoWaySS) {
+    basicSpanToDepth = 20;
+  } else if (isOneWay) {
+    basicSpanToDepth = oneWayCondition === 'simply_supported' ? 20 : 26;
   }
 
-  // 4.1 Short Span Deflection Check (lx, dx, ultimate Msx)
-  const fs_x = (2 / 3) * fy * (flexureShortMidspan.As_req / flexureShortMidspan.As_prov);
-  const M_bd2_x = (Msx * 1e6) / (b * Math.pow(dx, 2));
+  // 4.1 Short Span / Cantilever Deflection Check
+  const M_design_def = isCantilever ? Mhx : Msx;
+  const flexureRef_def = isCantilever ? flexureShortSupport : flexureShortMidspan;
+
+  const fs_x = (flexureRef_def && flexureRef_def.As_prov > 0)
+    ? (2 / 3) * fy * (flexureRef_def.As_req / flexureRef_def.As_prov)
+    : (2 / 3) * fy;
+  const M_bd2_x = (M_design_def * 1e6) / (b * Math.pow(dx, 2));
   const F1_raw_x = 0.55 + (477 - fs_x) / (120 * (0.9 + M_bd2_x));
   const F1_x = Math.min(2.0, Math.max(0.55, F1_raw_x));
   const allowableSpanToDepth_x = basicSpanToDepth * F1_x;
@@ -704,10 +745,10 @@ export function calculateBS8110Slab(inputs) {
   const pass_x = actualSpanToDepth_x <= allowableSpanToDepth_x;
 
   const shortSpanDeflection = {
-    spanName: 'Short Span (lx)',
+    spanName: isCantilever ? 'Cantilever Length (lx)' : 'Short Span (lx)',
     spanLength: lx,
     d: dx,
-    M_midspan: Msx,
+    M_midspan: M_design_def,
     fs: fs_x,
     M_bd2: M_bd2_x,
     F1: F1_x,
@@ -715,15 +756,15 @@ export function calculateBS8110Slab(inputs) {
     actualSpanToDepth: actualSpanToDepth_x,
     pass: pass_x,
     workingLines: [
-      `Base span/d ratio = ${basicSpanToDepth} (${isTwoWayRestrained ? 'Two-Way Restrained' : isTwoWaySS ? 'Two-Way Simply Supported' : isOneWay ? 'One-Way Solid' : 'Cantilever'})`,
-      `Short Span Length lx = ${lx}m, dx = ${dx.toFixed(0)}mm`,
-      `Ultimate Midspan Moment Msx = ${Msx.toFixed(2)} kNm/m`,
-      `Service Stress fs,x = (2/3) × ${fy} × (${flexureShortMidspan.As_req.toFixed(2)} / ${flexureShortMidspan.As_prov.toFixed(1)}) = ${fs_x.toFixed(1)} N/mm²`,
-      `M / (b.d²) = (${Msx.toFixed(2)}×10⁶) / (1000×${dx.toFixed(0)}²) = ${M_bd2_x.toFixed(3)} N/mm² (using ultimate Msx)`,
-      `Modification Factor F1,x = 0.55 + (477 - ${fs_x.toFixed(1)}) / [120 × (0.9 + ${M_bd2_x.toFixed(3)})] = ${F1_raw_x.toFixed(2)} (capped max 2.0 → ${F1_x.toFixed(2)})`,
+      `Base span/d ratio = ${basicSpanToDepth} (${isTwoWayRestrained ? 'Two-Way Restrained' : isTwoWaySS ? 'Two-Way Simply Supported' : isOneWay ? `One-Way Solid (${oneWayCondition.replace(/_/g, ' ')})` : 'Cantilever'})`,
+      `${isCantilever ? 'Cantilever Length' : 'Short Span Length'} lx = ${lx}m, dx = ${dx.toFixed(0)}mm`,
+      `Design Moment M = ${M_design_def.toFixed(2)} kNm/m (${isCantilever ? 'Support Mhx' : 'Midspan Msx'})`,
+      `Service Stress fs = (2/3) × ${fy} × (${flexureRef_def.As_req.toFixed(2)} / ${flexureRef_def.As_prov.toFixed(1)}) = ${fs_x.toFixed(1)} N/mm²`,
+      `M / (b.d²) = (${M_design_def.toFixed(2)}×10⁶) / (1000×${dx.toFixed(0)}²) = ${M_bd2_x.toFixed(3)} N/mm²`,
+      `Modification Factor F1 = 0.55 + (477 - ${fs_x.toFixed(1)}) / [120 × (0.9 + ${M_bd2_x.toFixed(3)})] = ${F1_raw_x.toFixed(2)} (capped max 2.0 → ${F1_x.toFixed(2)})`,
       `Allowable span/d = ${basicSpanToDepth} × ${F1_x.toFixed(2)} = ${allowableSpanToDepth_x.toFixed(2)}`,
       `Actual span/d = (${lx}×1000) / ${dx.toFixed(0)} = ${actualSpanToDepth_x.toFixed(2)}`,
-      `Short Span Deflection: Actual (${actualSpanToDepth_x.toFixed(1)}) ≤ Allowable (${allowableSpanToDepth_x.toFixed(1)}) → ${pass_x ? 'PASS (Adequate)' : 'FAIL'}`
+      `Deflection Check: Actual (${actualSpanToDepth_x.toFixed(1)}) ≤ Allowable (${allowableSpanToDepth_x.toFixed(1)}) → ${pass_x ? 'PASS (Adequate)' : 'FAIL'}`
     ]
   };
 

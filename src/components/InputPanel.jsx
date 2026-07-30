@@ -97,7 +97,22 @@ export default function InputPanel({ inputs, onChange, onApplyPreset, onNewBlank
           </select>
         </div>
 
-        {inputs.slabType === 'two_way_restrained' && (
+        {(inputs.slabType === 'one_way' || inputs.slabType === 'OneWaySolid') && (
+          <div className="input-field-group">
+            <label className="input-label">One-Way Support Condition (BS 8110 Table 3.12)</label>
+            <select
+              className="framer-select"
+              value={inputs.oneWayCondition || 'simply_supported'}
+              onChange={(e) => handleInputChange('oneWayCondition', e.target.value)}
+            >
+              <option value="simply_supported">Simply Supported Single Span (M = 0.125 n lx²)</option>
+              <option value="continuous_end_span">Continuous - End Span (M = 0.086 n lx²)</option>
+              <option value="continuous_interior_span">Continuous - Interior Span (M = 0.063 n lx²)</option>
+            </select>
+          </div>
+        )}
+
+        {(inputs.slabType === 'two_way_restrained' || inputs.slabType === 'TwoWayRestrained') && (
           <div className="input-field-group">
             <label className="input-label">Panel Edge Condition (BS 8110 Table 3.14)</label>
             <select

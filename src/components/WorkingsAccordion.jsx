@@ -25,6 +25,18 @@ export default function WorkingsAccordion({ result }) {
   const shortDef = deflection?.shortSpan;
   const longDef = deflection?.longSpan;
 
+  const isOneWay = inputs?.slabType === 'OneWaySolid' || inputs?.slabType === 'one_way';
+  const isCantilever = inputs?.slabType === 'Cantilever' || inputs?.slabType === 'cantilever';
+  const isTwoWaySS = inputs?.slabType === 'TwoWaySimplySupported' || inputs?.slabType === 'two_way_ss';
+
+  const clauseBadgeText = isTwoWaySS
+    ? 'Table 3.13'
+    : isOneWay
+    ? 'Table 3.12'
+    : isCantilever
+    ? 'Cl 3.5.2'
+    : 'Table 3.14';
+
   return (
     <div className="framer-card">
       <div className="card-title-row">
@@ -45,7 +57,7 @@ export default function WorkingsAccordion({ result }) {
               <span className="step-number-badge">1</span>
               <div>
                 <span>Aspect Ratio & BS 8110 Bending Moments</span>
-                <span className="clause-badge">Table 3.14</span>
+                <span className="clause-badge">{clauseBadgeText}</span>
               </div>
             </div>
             {openSections.moments ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -54,14 +66,14 @@ export default function WorkingsAccordion({ result }) {
           {openSections.moments && (
             <div className="accordion-content">
               <div className="math-step-block">
-                <div className="math-step-title">1.1 Aspect Ratio (ly/lx) Table Lookup</div>
+                <div className="math-step-title">1.1 Aspect Ratio (ly/lx) & Code Table Lookup</div>
                 <div className="math-formula">
                   Actual Ratio ly/lx = {safeLy.toFixed(2)} / {safeLx} = {safeRatio.toFixed(3)}
                   <br />
                   Upward Table Lookup Rule: Rounded UPWARD to nearest standard ratio = <strong>{effectiveRatio}</strong>
                 </div>
                 <div className="math-explanation">
-                  BS 8110 Table 3.14 coefficients evaluated at ratio = <strong>{effectiveRatio}</strong>.
+                  BS 8110 {clauseBadgeText} coefficients evaluated at ratio = <strong>{effectiveRatio}</strong>.
                 </div>
               </div>
 

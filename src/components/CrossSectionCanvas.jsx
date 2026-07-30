@@ -99,10 +99,27 @@ export default function CrossSectionCanvas({ result }) {
             rx="3"
           />
 
-          <line x1={secX + 10} y1={secY + secH - 15} x2={secX + secW - 10} y2={secY + secH - 15} stroke="#10b981" strokeWidth="3" />
-          <circle cx={secX + 25} cy={secY + secH - 22} r="3" fill="#6366f1" />
-          <circle cx={secX + 40} cy={secY + secH - 22} r="3" fill="#6366f1" />
-          <circle cx={secX + 55} cy={secY + secH - 22} r="3" fill="#6366f1" />
+          {/* For Cantilever, main rebar is at the top */}
+          {inputs?.slabType === 'Cantilever' || inputs?.slabType === 'cantilever' ? (
+            <>
+              {/* Support Hatch / Fixed Wall Indicator */}
+              <line x1={secX} y1={secY} x2={secX} y2={secY + secH} stroke="#2563eb" strokeWidth="4" />
+              {/* Top Main Tension Rebar */}
+              <line x1={secX + 5} y1={secY + 15} x2={secX + secW - 10} y2={secY + 15} stroke="#ef4444" strokeWidth="3" />
+              {/* Bottom Secondary Rebar */}
+              <circle cx={secX + 25} cy={secY + secH - 15} r="3" fill="#6366f1" />
+              <circle cx={secX + 40} cy={secY + secH - 15} r="3" fill="#6366f1" />
+              <circle cx={secX + 55} cy={secY + secH - 15} r="3" fill="#6366f1" />
+            </>
+          ) : (
+            <>
+              {/* Bottom Main Tension Rebar */}
+              <line x1={secX + 10} y1={secY + secH - 15} x2={secX + secW - 10} y2={secY + secH - 15} stroke="#10b981" strokeWidth="3" />
+              <circle cx={secX + 25} cy={secY + secH - 22} r="3" fill="#6366f1" />
+              <circle cx={secX + 40} cy={secY + secH - 22} r="3" fill="#6366f1" />
+              <circle cx={secX + 55} cy={secY + secH - 22} r="3" fill="#6366f1" />
+            </>
+          )}
 
           <text x={secX + secW / 2} y={secY + secH / 2} fill="var(--text-main)" fontSize="10" fontWeight="600" textAnchor="middle">
             h = {inputs?.h || 150}mm

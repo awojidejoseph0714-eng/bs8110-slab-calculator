@@ -28,17 +28,27 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
   const safeDy = Number(inputs?.dy) || 113;
   const safeN = Number(result?.n) || 12.0;
 
-  const isOneWayOrCantilever = inputs?.slabType === 'OneWaySolid' || inputs?.slabType === 'one_way' || inputs?.slabType === 'Cantilever' || inputs?.slabType === 'cantilever';
+  const isOneWay = inputs?.slabType === 'OneWaySolid' || inputs?.slabType === 'one_way';
+  const isCantilever = inputs?.slabType === 'Cantilever' || inputs?.slabType === 'cantilever';
+  const isTwoWaySS = inputs?.slabType === 'TwoWaySimplySupported' || inputs?.slabType === 'two_way_ss';
 
   const sectionsList = [
-    flexureParts?.shortMidspan,
-    inputs?.slabType === 'TwoWayRestrained' || inputs?.slabType === 'two_way_restrained' || inputs?.slabType === 'Cantilever' || inputs?.slabType === 'cantilever' ? flexureParts?.shortSupport : null,
-    !isOneWayOrCantilever ? flexureParts?.longMidspan : null,
-    inputs?.slabType === 'TwoWayRestrained' || inputs?.slabType === 'two_way_restrained' ? flexureParts?.longSupport : null
+    !isCantilever ? flexureParts?.shortMidspan : null,
+    (flexureParts?.shortSupport && flexureParts.shortSupport.M > 0) || isCantilever ? flexureParts?.shortSupport : null,
+    flexureParts?.longMidspan,
+    flexureParts?.longSupport && flexureParts.longSupport.M > 0 ? flexureParts?.longSupport : null
   ].filter(Boolean);
 
   const shortDef = deflection?.shortSpan;
   const longDef = deflection?.longSpan;
+
+  const clauseBadgeText = isTwoWaySS
+    ? 'Table 3.13'
+    : isOneWay
+    ? 'Table 3.12'
+    : isCantilever
+    ? 'Cl 3.5.2'
+    : 'Table 3.14';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -119,7 +129,7 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
       <div className="framer-card">
         <div className="card-title-row">
           <h3 className="card-heading" style={{ fontSize: '1.05rem' }}>1. Bending Moments (M = β · n · lx²)</h3>
-          <span className="clause-badge">Table 3.14</span>
+          <span className="clause-badge">{clauseBadgeText}</span>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px' }}>
