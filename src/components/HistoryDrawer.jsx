@@ -52,66 +52,72 @@ export default function HistoryDrawer({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {history.map((item) => (
-                <div
-                  key={item.id}
-                  className="history-item-card"
-                  onClick={() => onLoadHistoryItem(item)}
-                >
-                  <div className="history-item-header">
-                    <div className="history-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {item.result.overallPass ? (
-                        <ShieldCheck size={16} className="text-emerald-400" />
-                      ) : (
-                        <AlertTriangle size={16} className="text-red-400" />
-                      )}
-                      <span>
-                        {item.inputs.elementCategory === 'slab'
-                          ? `Slab (${item.inputs.slabType})`
-                          : `Beam (${item.inputs.beamType})`}
+              {history.map((item) => {
+                const isPass = item.result?.overallPass ?? false;
+                const slabType = item.inputs?.slabType || 'TwoWayRestrained';
+                const momentVal = item.result?.M_max ?? item.result?.moments?.Msx ?? 0;
+                const shearVal = item.result?.shearCheck?.V_max ?? item.result?.shearCheck?.v ?? (item.result?.n ? (item.result.n * (Number(item.inputs?.lxInput) || 4) / 2) : 0);
+                const lx = item.inputs?.lxInput || item.inputs?.lx || 4.0;
+                const h = item.inputs?.hInput || item.inputs?.h || 160;
+                const dx = item.inputs?.dx || (Number(h) - Number(item.inputs?.coverInput || 25) - 6);
+
+                return (
+                  <div
+                    key={item.id}
+                    className="history-item-card"
+                    onClick={() => onLoadHistoryItem(item)}
+                  >
+                    <div className="history-item-header">
+                      <div className="history-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {isPass ? (
+                          <ShieldCheck size={16} className="text-emerald-400" />
+                        ) : (
+                          <AlertTriangle size={16} className="text-red-400" />
+                        )}
+                        <span>Slab ({slabType})</span>
+                      </div>
+
+                      <span className="history-time">
+                        {item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                       </span>
                     </div>
 
-                    <span className="history-time">
-                      {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+                      M = {momentVal.toFixed(1)} kNm/m · V = {shearVal.toFixed(1)} kN/m
+                      <br />
+                      Span lx = {lx}m · h = {h}mm · dx = {dx}mm
+                    </div>
 
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                    M = {item.result.moment.toFixed(1)} kNm · V = {item.result.shear.toFixed(1)} kN
-                    <br />
-                    Span lx = {item.inputs.lxInput}m · d = {item.inputs.dInput}mm · b = {item.inputs.bInput}mm
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
-                    <span
-                      className={`check-pill ${item.result.overallPass ? 'pass' : 'fail'}`}
-                      style={{ fontSize: '0.65rem' }}
-                    >
-                      {item.result.overallPass ? 'SATISFACTORY' : 'REVISION REQ.'}
-                    </span>
-
-                    <div style={{ display: 'flex', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
-                      <button
-                        className="btn-framer btn-ghost"
-                        style={{ padding: '4px 8px', fontSize: '0.725rem' }}
-                        onClick={() => onLoadHistoryItem(item)}
-                        title="Load into Calculator"
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
+                      <span
+                        className={`check-pill ${isPass ? 'pass' : 'fail'}`}
+                        style={{ fontSize: '0.65rem' }}
                       >
-                        Load <ArrowUpRight size={12} />
-                      </button>
-                      <button
-                        className="btn-framer btn-ghost"
-                        style={{ padding: '4px', color: '#ef4444' }}
-                        onClick={() => onDeleteHistoryItem(item.id)}
-                        title="Delete entry"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                        {isPass ? 'SATISFACTORY' : 'REVISION REQ.'}
+                      </span>
+
+                      <div style={{ display: 'flex', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="btn-framer btn-ghost"
+                          style={{ padding: '4px 8px', fontSize: '0.725rem' }}
+                          onClick={() => onLoadHistoryItem(item)}
+                          title="Load into Calculator"
+                        >
+                          Load <ArrowUpRight size={12} />
+                        </button>
+                        <button
+                          className="btn-framer btn-ghost"
+                          style={{ padding: '4px', color: '#ef4444' }}
+                          onClick={() => onDeleteHistoryItem(item.id)}
+                          title="Delete entry"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}

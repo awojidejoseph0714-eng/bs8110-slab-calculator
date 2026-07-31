@@ -30,6 +30,7 @@ export default function ResultsSummary({ result, onSaveToHistory, onOpenParamsMo
 
   const isOneWay = inputs?.slabType === 'OneWaySolid' || inputs?.slabType === 'one_way';
   const isCantilever = inputs?.slabType === 'Cantilever' || inputs?.slabType === 'cantilever';
+  const isOneWayOrCantilever = isOneWay || isCantilever;
   const isTwoWaySS = inputs?.slabType === 'TwoWaySimplySupported' || inputs?.slabType === 'two_way_ss';
 
   const sectionsList = [
